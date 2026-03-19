@@ -1,0 +1,4 @@
+interface:
+  display_name: "RevenueCatKit 订阅与营销"
+  short_description: "分两部分处理 RevenueCat 订阅集成与营销卡片展示位"
+  default_prompt: "Use $revenuecatkit-subscription-and-marketing to inspect my current RevenueCat subscription integration and promo surfaces, then implement the required settings promo plus one homepage marketing surface."
