@@ -331,7 +331,25 @@ public final class RevenueCatViewModel {
 
     /// 购买指定套餐
     public func purchase(package: Package) async throws -> Bool {
-        guard let config else { return false }
+        try await purchaseWithOutcome(package: package) == .success
+    }
+
+    /// 购买结果细分。Bool 版 `purchase(package:)` 把「用户取消」「支付待批准」
+    /// 「交易完成但权益未激活」都折叠成 false——取消应静默，但后两种 UI 必须
+    /// 明确反馈（用户可能已付款）。需要区分时用本方法。
+    public enum PurchaseOutcome: Sendable, Equatable {
+        /// 权益已激活
+        case success
+        /// 用户主动取消（UI 应保持静默）
+        case cancelled
+        /// 支付待处理（如家人共享 Ask to Buy 待批准），权益会在批准后到账
+        case pending
+        /// 交易未被取消也未报错，但目标权益未激活（异常态，提示恢复购买/联系支持）
+        case notEntitled
+    }
+
+    public func purchaseWithOutcome(package: Package) async throws -> PurchaseOutcome {
+        guard let config else { return .notEntitled }
 
         logger.info("开始购买套餐: \(package.identifier)")
 
@@ -344,25 +362,26 @@ public final class RevenueCatViewModel {
             // 直接使用 purchase 返回的最新 customerInfo 更新状态
             updateSubscriptionStatus(from: result.customerInfo)
 
-            let success =
-                result.customerInfo.entitlements[config.entitlementID]?.isActive == true
-            if success {
+            if result.customerInfo.entitlements[config.entitlementID]?.isActive == true {
                 logger.info("成功购买套餐: \(package.identifier)")
                 showPaywall = false
-            } else {
-                logger.warning("购买套餐未激活权限: \(package.identifier)")
+                return .success
             }
-
-            return success
+            if result.userCancelled {
+                logger.info("用户取消购买")
+                return .cancelled
+            }
+            logger.warning("购买套餐未激活权限: \(package.identifier)")
+            return .notEntitled
         } catch let error as ErrorCode {
             switch error {
             case .purchaseCancelledError:
                 logger.info("用户取消购买")
-                return false
+                return .cancelled
 
             case .paymentPendingError:
                 logger.info("支付待处理（例如家人共享待批准）")
-                return false
+                return .pending
 
             case .productNotAvailableForPurchaseError:
                 logger.error("产品不可购买: \(error.localizedDescription)")
@@ -378,7 +397,7 @@ public final class RevenueCatViewModel {
             }
         } catch let error as SKError where error.code == .paymentCancelled {
             logger.info("用户取消购买（StoreKit）")
-            return false
+            return .cancelled
         } catch {
             logger.error("购买套餐失败: \(error.localizedDescription)")
             throw error
