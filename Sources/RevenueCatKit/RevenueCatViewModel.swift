@@ -1,5 +1,8 @@
 // MARK: - 更新记录
 
+// 2026-03-27
+// - 新增：#if DEBUG 的 setPreviewPremiumAccess(_:status:)，用于 SwiftUI Preview 模拟会员状态
+
 // 2026-02-21
 // - 重构：从 BodyWatch 项目迁移为独立 SPM Package
 // - 重构：移除硬编码配置，改用 configure(config:) 注入模式
@@ -222,7 +225,6 @@ public final class RevenueCatViewModel {
         // 因为缓存只存储了 Bool 值，无法准确判断具体订阅类型
         if hasSyncedBefore {
             hasPremiumAccess = cachedPremiumAccess
-            logger.debug("从缓存加载会员状态: \(self.cachedPremiumAccess)")
         }
     }
 
@@ -243,10 +245,8 @@ public final class RevenueCatViewModel {
             return
         }
 
-        // 在 DEBUG 模式下自动启用调试日志
-        #if DEBUG
-            Purchases.logLevel = .debug
-        #endif
+        // 默认关闭 RevenueCat 的详细调试日志，避免运行时控制台被 SDK 噪音淹没
+        Purchases.logLevel = .warn
 
         // 配置 RevenueCat SDK（这是一个同步操作）
         if let proxyURL = config.chinaProxyURL {
@@ -255,7 +255,6 @@ public final class RevenueCatViewModel {
         Purchases.configure(withAPIKey: config.apiKey)
 
         isRevenueCatConfigured = true
-        logger.info("RevenueCat SDK 已配置（同步）")
 
         // 恢复所有等待配置完成的 continuations
         let waitingContinuations = configurationContinuations
@@ -298,7 +297,6 @@ public final class RevenueCatViewModel {
             logger.debug("已恢复 \(waitingContinuations.count) 个等待初始化的调用")
         }
 
-        logger.info("RevenueCatViewModel 初始化完成")
     }
 
     /// 等待初始化完成
@@ -326,7 +324,6 @@ public final class RevenueCatViewModel {
     public func loadOfferings() async {
         do {
             offerings = try await Purchases.shared.offerings()
-            logger.info("成功加载 RevenueCat 产品套餐")
         } catch {
             logger.error("加载 RevenueCat 产品失败: \(error.localizedDescription)")
         }
@@ -429,18 +426,11 @@ public final class RevenueCatViewModel {
     private func updateSubscriptionStatus(from customerInfo: CustomerInfo) {
         guard let config else { return }
 
-        logger.debug("开始更新订阅状态...")
-        logger.debug("获取到 CustomerInfo: \(customerInfo.originalAppUserId)")
-
-        let proEntitlement = customerInfo.entitlements[config.entitlementID]
-        logger.debug("Pro 权益信息: \(proEntitlement?.description ?? "nil")")
-
         // 检查是否有活跃权限
         let isActive = customerInfo.entitlements[config.entitlementID]?.isActive == true
         hasPremiumAccess = isActive
         cachedPremiumAccess = isActive
         hasSyncedBefore = true
-        logger.debug("Pro 权益激活状态: \(isActive)，已更新缓存")
 
         // 确定订阅类型
         if let entitlement = customerInfo.entitlements[config.entitlementID] {
@@ -454,19 +444,12 @@ public final class RevenueCatViewModel {
                 if !config.lifetime.isEmpty && productId == config.lifetime {
                     subscriptionStatus = .lifetime
                     expirationDate = nil
-                    logger.debug("判定为终身买断会员")
                 } else if !config.annual.isEmpty && productId == config.annual {
                     subscriptionStatus = .annual
                     expirationDate = entitlement.expirationDate
-                    logger.debug(
-                        "判定为年度订阅会员, 到期时间: \(self.expirationDate?.description ?? "未知")"
-                    )
                 } else if !config.monthly.isEmpty && productId == config.monthly {
                     subscriptionStatus = .monthly
                     expirationDate = entitlement.expirationDate
-                    logger.debug(
-                        "判定为月度订阅会员, 到期时间: \(self.expirationDate?.description ?? "未知")"
-                    )
                 } else {
                     // 未知产品 ID 但权益活跃，视为有效会员
                     subscriptionStatus = .lifetime
@@ -478,27 +461,17 @@ public final class RevenueCatViewModel {
             } else {
                 subscriptionStatus = .none
                 expirationDate = nil
-                logger.debug("权益已过期或未激活")
             }
         } else {
             subscriptionStatus = .none
             expirationDate = nil
-            logger.debug("未找到 Pro 权益")
         }
-
-        logger.debug(
-            "最终状态 - 订阅状态: \(self.subscriptionStatus.rawValue), 高级权限: \(self.hasPremiumAccess ?? false)"
-        )
     }
 
     /// 刷新用户订阅状态（从服务器获取最新数据）
     public func refreshSubscriptionStatus() async {
-        logger.debug("开始从服务器刷新订阅状态...")
-
         // 确保 RevenueCat 已配置（防止竞态条件）
         if !isRevenueCatConfigured {
-            logger.info("RevenueCat 尚未配置，等待配置完成...")
-
             let configuredInTime = await withTaskGroup(of: Bool.self) { group in
                 group.addTask {
                     await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
@@ -689,3 +662,19 @@ public final class RevenueCatViewModel {
         subscriptionContentAppeared = false
     }
 }
+
+// MARK: - Preview 辅助（仅 DEBUG 可用）
+
+#if DEBUG
+extension RevenueCatViewModel {
+    /// 为 SwiftUI Preview 设置模拟会员状态，不影响生产逻辑
+    public func setPreviewPremiumAccess(_ value: Bool?, status: SubscriptionStatus = .lifetime) {
+        hasPremiumAccess = value
+        if value == true {
+            subscriptionStatus = status
+        } else {
+            subscriptionStatus = .none
+        }
+    }
+}
+#endif
