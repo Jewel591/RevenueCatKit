@@ -5,9 +5,11 @@
 //   只说明商品配了优惠，不代表当前 Apple Account 有资格。不查资格直接照 discount 价格
 //   展示会超额承诺（用户看到首年优惠价，购买单按原价收）。Apper 1.0 提审前踩过
 //   （apper#45，Codex review 抓出）
-// - 改进：loadOfferings() 返回 Bool（@discardableResult，源码兼容）——原先无返回值时
-//   调用方只能拿 offerings == nil 当失败的代理信号，「网络失败」与「成功但没有商品」
-//   在 UI 上分不开，而这两者该给的反馈相反
+// - 改进：loadOfferings() 返回 Bool（@discardableResult）——原先无返回值时调用方只能拿
+//   offerings == nil 当失败的代理信号，「网络失败」与「成功但没有商品」在 UI 上分不开，
+//   而这两者该给的反馈相反。⚠️ 这不是完全的源码兼容变更：返回类型变更改变了函数完整
+//   类型，协议见证 / 函数值 / 泛型约束会失效，@discardableResult 只覆盖语句式调用。
+//   已核实两个消费方均为语句式调用、类为 final、未暴露给 ObjC，故实际不受影响
 
 // 2026-03-27
 // - 新增：#if DEBUG 的 setPreviewPremiumAccess(_:status:)，用于 SwiftUI Preview 模拟会员状态
@@ -339,8 +341,14 @@ public final class RevenueCatViewModel {
     /// 后者该给「暂未开放」之类的诚实提示，给反了都是错的。（Apper 付费墙为此
     /// 长期用 `offerings == nil` 凑合，见其 PaywallView 的三态注释。）
     ///
-    /// 加 `@discardableResult` 是为了源码兼容：既有 `await vm.loadOfferings()`
-    /// 的调用点无需改动。
+    /// ⚠️ **返回类型变更改变了函数的完整类型，这不是完全的源码兼容变更。**
+    /// `@discardableResult` 只消除「未使用返回值」的警告，让语句式调用
+    /// （`await vm.loadOfferings()`）无需改动；但协议见证（原本能满足
+    /// `func loadOfferings() async` 要求的，现在不能了）、函数值推导、
+    /// 依赖完整函数类型的泛型约束都会失效。
+    ///
+    /// 已核实当前两个消费方不受影响：调用点均为语句式，本类是 `final`
+    /// （不存在 override），也未暴露给 Objective-C（不存在 `#selector`）。
     @discardableResult
     public func loadOfferings() async -> Bool {
         do {
@@ -360,11 +368,18 @@ public final class RevenueCatViewModel {
     /// 付费墙若直接照 discount 的价格展示，就是超额承诺——用户看到首年 $9.99、
     /// 购买单却收 $19.99。
     ///
-    /// 判定优惠能不能展示，必须同时满足三条，缺一不可：
+    /// 判定优惠能不能展示，下面每条都要成立（README 有可复制的完整片段）：
     /// 1. 商品确实配了 `introductoryDiscount`
-    /// 2. 其 `paymentMode` 与你要用的话术相符（「首年 X，之后 Y」只适用于
-    ///    `.payUpFront`；免费试用是另一套文案）
-    /// 3. **本方法返回 `.eligible`**
+    /// 2. 其 `paymentMode` 与你要用的话术相符（「首期 X，之后 Y」只适用于
+    ///    `.payUpFront`；`.freeTrial` / `.payAsYouGo` 各是另一套文案）
+    /// 3. 优惠的**时长**（`subscriptionPeriod` × `numberOfPeriods`）与文案相符——
+    ///    最容易漏的一条。`.payUpFront` 只说明优惠款一次预付，不代表优惠期是一年，
+    ///    三个月的预付优惠同样是 `.payUpFront`，写成「首年 X」就是谎话
+    /// 4. **本方法返回 `.eligible`**
+    ///
+    /// ⚠️ 以上只证明「这个账号买得到这个折扣价」，**不证明这是限时活动**——
+    /// ASC 上的介绍性优惠可以不设起止日期。「早鸟」「限时」类角标的语义
+    /// 得来自你自己的活动配置，不能由 eligibility 推导。
     ///
     /// - Returns: 只有 `.eligible` 才可以展示优惠价与「早鸟 / 限时」类角标。
     ///   `.ineligible` 与 `.noIntroOfferExists` 展示原价；`.unknown`

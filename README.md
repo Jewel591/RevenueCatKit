@@ -37,22 +37,33 @@ RevenueCat SDK 的一层封装：订阅状态、购买 / 恢复、offerings 加�
 
 付费墙若直接照 discount 的价格展示，就是**超额承诺**——用户看到首年 $9.99，购买单收 $19.99。
 
-判定优惠能不能展示，三条缺一不可：
+判定优惠能不能展示，下面每一条都要成立：
 
 ```swift
-// 1. 商品确实配了优惠
-guard let discount = product.introductoryDiscount,
-      // 2. paymentMode 与你的话术相符（「首年 X，之后 Y」只适用于 .payUpFront）
-      discount.paymentMode == .payUpFront,
-      // 3. 当前账号确实有资格
-      await viewModel.introEligibility(for: product) == .eligible
+guard
+    // 1. 商品确实配了优惠
+    let discount = product.introductoryDiscount,
+    // 2. paymentMode 与你的话术相符
+    //    「首期 X，之后 Y」只适用于 .payUpFront；免费试用（.freeTrial）
+    //    与分期折扣（.payAsYouGo）各是另一套文案
+    discount.paymentMode == .payUpFront,
+    // 3. 优惠的**时长**与你的文案相符 —— 这条最容易漏。
+    //    .payUpFront 只说明「优惠款一次预付」，不代表优惠期是一年：
+    //    三个月的预付优惠同样是 .payUpFront，写成「首年 $9.99」就是谎话。
+    //    实际时长 = subscriptionPeriod × numberOfPeriods，必须自己核对。
+    discount.subscriptionPeriod == .init(value: 1, unit: .year),
+    discount.numberOfPeriods == 1,
+    // 4. 当前账号确实有资格
+    await viewModel.introEligibility(for: product) == .eligible
 else {
-    // 任一不成立 → 展示原价，且不要打「早鸟 / 限时」类角标
+    // 任一不成立 → 展示原价，且不要打优惠角标
     return
 }
 ```
 
 `.unknown`（RevenueCat 信息不足、或查询失败）**按 RevenueCat 官方建议同样展示原价**——宁可少承诺，不可多承诺。
+
+> ⚠️ **「早鸟」「限时」这类角标不能由 eligibility 推导。** 上面四条只证明「这个账号买得到这个折扣价」，不证明这是一个有截止日期的活动——ASC 上的介绍性优惠可以不设起止日期，长期有效。角标语义来自你自己的活动配置，得另有来源。
 
 > Apper 1.0 提审前踩过：付费墙常显 Early bird 角标却渲染基础价；修掉之后又发现反方向的超额承诺风险（[apper#45](https://github.com/Jewel591/apper/pull/45)，Codex review 抓出）。
 
