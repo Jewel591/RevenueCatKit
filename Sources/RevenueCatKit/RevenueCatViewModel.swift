@@ -381,7 +381,8 @@ public final class RevenueCatViewModel {
     /// ASC 上的介绍性优惠可以不设起止日期。「早鸟」「限时」类角标的语义
     /// 得来自你自己的活动配置，不能由 eligibility 推导。
     ///
-    /// - Returns: 只有 `.eligible` 才可以展示优惠价与「早鸟 / 限时」类角标。
+    /// - Returns: `.eligible` 是**展示优惠价的必要条件之一**（还需上面 1–3 条同时成立），
+    ///   ⚠️ **与角标无关**——「早鸟 / 限时」的语义见上方警告，不能由本返回值推导。
     ///   `.ineligible` 与 `.noIntroOfferExists` 展示原价；`.unknown`
     ///   （RevenueCat 信息不足）**按 RevenueCat 官方建议同样展示原价**——
     ///   宁可少承诺，不可多承诺。查询失败时 SDK 亦折叠为 `.unknown`。
