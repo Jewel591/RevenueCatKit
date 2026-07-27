@@ -1,5 +1,14 @@
 // MARK: - 更新记录
 
+// 2026-07-27
+// - 新增：introEligibility(for:)（StoreProduct / Package 两个重载）——introductoryDiscount
+//   只说明商品配了优惠，不代表当前 Apple Account 有资格。不查资格直接照 discount 价格
+//   展示会超额承诺（用户看到首年优惠价，购买单按原价收）。Apper 1.0 提审前踩过
+//   （apper#45，Codex review 抓出）
+// - 改进：loadOfferings() 返回 Bool（@discardableResult，源码兼容）——原先无返回值时
+//   调用方只能拿 offerings == nil 当失败的代理信号，「网络失败」与「成功但没有商品」
+//   在 UI 上分不开，而这两者该给的反馈相反
+
 // 2026-03-27
 // - 新增：#if DEBUG 的 setPreviewPremiumAccess(_:status:)，用于 SwiftUI Preview 模拟会员状态
 
@@ -321,12 +330,53 @@ public final class RevenueCatViewModel {
     // MARK: - Public Methods
 
     /// 加载 RevenueCat 产品列表
-    public func loadOfferings() async {
+    ///
+    /// - Returns: `true` = 请求成功，`offerings` 已更新（**可能是空 offerings**——
+    ///   ASC 商品还没建好时就是这种）；`false` = 请求失败，`offerings` 保留上一次快照。
+    ///
+    /// 返回值存在的理由：不给返回值时调用方只能拿 `offerings == nil` 当失败的代理信号，
+    /// 于是「网络失败」与「成功但没有商品」在 UI 上无法区分——前者该给 Retry，
+    /// 后者该给「暂未开放」之类的诚实提示，给反了都是错的。（Apper 付费墙为此
+    /// 长期用 `offerings == nil` 凑合，见其 PaywallView 的三态注释。）
+    ///
+    /// 加 `@discardableResult` 是为了源码兼容：既有 `await vm.loadOfferings()`
+    /// 的调用点无需改动。
+    @discardableResult
+    public func loadOfferings() async -> Bool {
         do {
             offerings = try await Purchases.shared.offerings()
+            return true
         } catch {
             logger.error("加载 RevenueCat 产品失败: \(error.localizedDescription)")
+            return false
         }
+    }
+
+    /// 查询当前 Apple Account 对某商品「介绍性优惠 / 免费试用」的资格。
+    ///
+    /// ⚠️ **`StoreProduct.introductoryDiscount` 只说明「商品配置了优惠」，
+    /// 不代表「当前账号能享受」。** 用过该订阅组介绍性优惠、之后订阅过期的用户
+    /// 重新进入付费墙时，商品上依然挂着 discount，但 Apple 结算会按原价收费。
+    /// 付费墙若直接照 discount 的价格展示，就是超额承诺——用户看到首年 $9.99、
+    /// 购买单却收 $19.99。
+    ///
+    /// 判定优惠能不能展示，必须同时满足三条，缺一不可：
+    /// 1. 商品确实配了 `introductoryDiscount`
+    /// 2. 其 `paymentMode` 与你要用的话术相符（「首年 X，之后 Y」只适用于
+    ///    `.payUpFront`；免费试用是另一套文案）
+    /// 3. **本方法返回 `.eligible`**
+    ///
+    /// - Returns: 只有 `.eligible` 才可以展示优惠价与「早鸟 / 限时」类角标。
+    ///   `.ineligible` 与 `.noIntroOfferExists` 展示原价；`.unknown`
+    ///   （RevenueCat 信息不足）**按 RevenueCat 官方建议同样展示原价**——
+    ///   宁可少承诺，不可多承诺。查询失败时 SDK 亦折叠为 `.unknown`。
+    public func introEligibility(for product: StoreProduct) async -> IntroEligibilityStatus {
+        await Purchases.shared.checkTrialOrIntroDiscountEligibility(product: product)
+    }
+
+    /// `introEligibility(for:)` 的 Package 便捷重载。
+    public func introEligibility(for package: Package) async -> IntroEligibilityStatus {
+        await introEligibility(for: package.storeProduct)
     }
 
     /// 购买指定套餐
