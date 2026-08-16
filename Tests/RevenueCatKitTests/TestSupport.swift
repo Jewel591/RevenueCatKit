@@ -2,6 +2,15 @@ import Foundation
 import XCTest
 @testable import RevenueCatKit
 
+@MainActor
+func seedPersistedAccount(
+    _ provider: FakeRevenueCatProvider,
+    appUserID: String = "user-a"
+) {
+    provider.appUserID = appUserID
+    provider.isAnonymous = false
+}
+
 func makeConfiguration(
     identityPolicy: RevenueCatClient.IdentityPolicy = .anonymousAndIdentified
 ) -> RevenueCatClient.Configuration {
@@ -20,6 +29,12 @@ func makeConfiguredClient(
 ) async throws -> RevenueCatClient {
     if let initialCustomerInfo {
         provider.customerInfoResponses = [.success(initialCustomerInfo)]
+    } else if provider.customerInfoResponses.isEmpty {
+        provider.customerInfoResponses = [.success(makeCustomerInfo(appUserID: "user-a"))]
+    }
+    if provider.appUserID == nil {
+        provider.appUserID = "user-a"
+        provider.isAnonymous = false
     }
     let client = RevenueCatClient(
         provider: provider,

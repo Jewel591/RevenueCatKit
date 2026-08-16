@@ -106,6 +106,7 @@ final class RevenueCatEntitlementTests: XCTestCase {
         let date = Date(timeIntervalSince1970: 3_000)
         let info = makeCustomerInfo(appUserID: "user-a", requestDate: date)
         let provider = FakeRevenueCatProvider()
+        seedPersistedAccount(provider)
         provider.customerInfoResponses = [.success(info), .success(info), .success(info)]
         let client = RevenueCatClient(provider: provider)
         client.setDesiredIdentity(.account("user-a"))
@@ -125,6 +126,7 @@ final class RevenueCatEntitlementTests: XCTestCase {
         let newerDate = Date(timeIntervalSince1970: 4_000)
         let olderDate = Date(timeIntervalSince1970: 2_000)
         let provider = FakeRevenueCatProvider()
+        seedPersistedAccount(provider)
         provider.customerInfoResponses = [
             .success(makeCustomerInfo(appUserID: "user-a", requestDate: newerDate)),
             .success(
@@ -148,6 +150,7 @@ final class RevenueCatEntitlementTests: XCTestCase {
 
     func testRefreshFailureRetainsKnownSnapshotAndNoSnapshotFailureStaysUnknown() async throws {
         let provider = FakeRevenueCatProvider()
+        seedPersistedAccount(provider)
         provider.customerInfoResponses = [
             .success(
                 makeCustomerInfo(
@@ -168,6 +171,7 @@ final class RevenueCatEntitlementTests: XCTestCase {
         XCTAssertEqual(client.state.entitlement, known)
 
         let failingProvider = FakeRevenueCatProvider()
+        seedPersistedAccount(failingProvider)
         failingProvider.customerInfoResponses = [.failure(.network)]
         let failingClient = RevenueCatClient(provider: failingProvider)
         failingClient.setDesiredIdentity(.account("user-a"))
@@ -212,6 +216,7 @@ final class RevenueCatEntitlementTests: XCTestCase {
         let date = Date(timeIntervalSince1970: 5_000)
         let info = makeCustomerInfo(appUserID: "user-a", requestDate: date)
         let provider = FakeRevenueCatProvider()
+        seedPersistedAccount(provider)
         provider.customerInfoResponses = [.success(info), .success(info), .success(info)]
         let client = RevenueCatClient(provider: provider)
         client.setDesiredIdentity(.account("user-a"))

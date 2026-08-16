@@ -8,15 +8,32 @@ private final class ObservationFlag: @unchecked Sendable {
 
 @MainActor
 final class RevenueCatStateOrchestrationTests: XCTestCase {
-    func testPreconfiguredAccountIdentityIsPassedDirectlyToSDKWithoutLoginHop() async throws {
+    func testFreshAccountIdentityRestoresPersistedUserThenLogsIn() async throws {
         let provider = FakeRevenueCatProvider()
         let client = RevenueCatClient(provider: provider)
 
         client.setDesiredIdentity(.account("user-a"))
         try await client.configure(makeConfiguration())
 
-        XCTAssertEqual(provider.configuredAppUserID, "user-a")
-        XCTAssertEqual(provider.logInCallCount, 0)
+        XCTAssertNil(provider.configuredAppUserID)
+        XCTAssertEqual(provider.logInCallCount, 1)
+        XCTAssertEqual(client.state.identityAlignment, .matching)
+        XCTAssertEqual(client.state.currentAppUserID, "user-a")
+    }
+
+    func testPersistedAnonymousPurchasesAreAliasedOnFirstIdentifiedConfigure() async throws {
+        let provider = FakeRevenueCatProvider()
+        provider.appUserID = "$RCAnonymousID:legacy"
+        provider.isAnonymous = true
+        provider.logInResponse = .success(makeCustomerInfo(appUserID: "user-a"))
+        let client = RevenueCatClient(provider: provider)
+
+        client.setDesiredIdentity(.account("user-a"))
+        try await client.configure(makeConfiguration())
+
+        XCTAssertNil(provider.configuredAppUserID)
+        XCTAssertEqual(provider.logInCallCount, 1)
+        XCTAssertEqual(provider.appUserID, "user-a")
         XCTAssertEqual(client.state.identityAlignment, .matching)
         XCTAssertEqual(client.state.currentAppUserID, "user-a")
     }

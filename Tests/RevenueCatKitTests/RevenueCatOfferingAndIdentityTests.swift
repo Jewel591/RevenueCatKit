@@ -125,6 +125,7 @@ final class RevenueCatOfferingAndIdentityTests: XCTestCase {
 
     func testIntroEligibilityIsCachedPerIdentityAndInvalidatedByCustomerInfo() async throws {
         let provider = FakeRevenueCatProvider()
+        seedPersistedAccount(provider)
         provider.customerInfoResponses = [
             .success(makeCustomerInfo(appUserID: "user-a")),
             .success(makeCustomerInfo(appUserID: "user-a", requestDate: Date(timeIntervalSince1970: 2_000))),
