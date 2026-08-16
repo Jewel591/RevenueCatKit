@@ -26,7 +26,9 @@ The Public SDK Key is App-specific public configuration, not a server secret. Th
 
 ## 2. Bridge unresolved authentication explicitly
 
-Do not treat “the authentication SDK has not answered yet” as signed out. Resolve the session first, then declare exactly one desired RevenueCat identity.
+Do not treat “the authentication SDK has not answered yet” as signed out. As soon as the App knows the account fact — a stored user ID, or confirmed first-launch anonymity — declare exactly one desired RevenueCat identity. Do not wait for CloudKit, dataset owner checks, or other capability verification; those gate backup, not purchases.
+
+`setDesiredIdentity(.anonymous)` logs the RevenueCat user out. Use it for first launch with no account, account deletion, or an intentional purchase-identity reset. Do not use it for “user signed out of optional cloud backup.”
 
 ```swift
 import RevenueCatKit
@@ -35,7 +37,8 @@ import RevenueCatKit
 final class MembershipIdentityCoordinator {
     enum SessionFact {
         case unresolved
-        case signedOut
+        case signedOutKeepingPurchases
+        case resetToAnonymous
         case signedIn(accountID: String)
     }
 
@@ -46,7 +49,9 @@ final class MembershipIdentityCoordinator {
         switch fact {
         case .unresolved:
             return
-        case .signedOut:
+        case .signedOutKeepingPurchases:
+            break
+        case .resetToAnonymous:
             client.setDesiredIdentity(.anonymous)
         case .signedIn(let accountID):
             client.setDesiredIdentity(.account(.init(accountID)))
@@ -73,18 +78,20 @@ final class MembershipIdentityCoordinator {
 }
 ```
 
-Calling `publish(.signedOut)` or `publish(.signedIn(accountID:))` before awaiting configuration lets the Kit configure RevenueCat with the resolved identity immediately. Publish every later login, logout, deletion, or account switch through the same coordinator. The example intentionally does nothing for `.unresolved`, so a cold launch never manufactures a signed-out RevenueCat identity while authentication is still loading.
+Calling `publish(.signedIn(accountID:))` or `publish(.resetToAnonymous)` before awaiting configuration lets the Kit restore any persisted RevenueCat user, then `logIn` or `logOut` to match. Persist `.signedIn` across process launches if the App allows signed-out purchases. Publish later login, deletion, and account switch through the same coordinator. The example intentionally does nothing for `.unresolved`, so a cold launch never manufactures a signed-out RevenueCat identity while the account fact is still loading. `.signedOutKeepingPurchases` leaves the last confirmed identity in place.
 
-For an App whose authentication layer already guarantees a resolved optional account ID, the bridge may be a smaller function:
+For an App whose authentication layer already guarantees a resolved optional account ID, the bridge may be a smaller function. Only map `nil` to `.anonymous` when identity was never resolved or you are resetting purchases:
 
 ```swift
 @MainActor
-func accountSessionDidChange(to accountID: String?) {
-    let identity: RevenueCatClient.DesiredIdentity = accountID.map {
-        .account(.init($0))
-    } ?? .anonymous
-
-    RevenueCatClient.shared.setDesiredIdentity(identity)
+func publishKnownAccountFact(_ accountID: String?, hasResolvedIdentity: Bool) {
+    if let accountID {
+        RevenueCatClient.shared.setDesiredIdentity(.account(.init(accountID)))
+        return
+    }
+    if !hasResolvedIdentity {
+        RevenueCatClient.shared.setDesiredIdentity(.anonymous)
+    }
 }
 ```
 
@@ -164,6 +171,8 @@ func plans(for state: OfferingLoadState) -> some View {
 
 Use `PurchaseOption.localizedTitle`, `localizedDescription`, `localizedPrice`, `subscriptionPeriod`, and `packageType` to draw the App's paywall. Do not use Product ID for UI branching. RevenueCatKit deliberately preserves Product ID only for diagnostics.
 
+`purchaseOptions` keeps RevenueCat Dashboard order. That is not a product default. If the App previously selected lifetime or annual, pick by `packageType`; do not use `.first`.
+
 ## 5. Purchase and restore
 
 Keep the `PurchaseOptionID` from the currently visible snapshot and pass it back unchanged:
@@ -237,8 +246,8 @@ Every remaining match needs an explicit reason. Tests may mention forbidden patt
 
 Verify with the package tests, the App's smallest membership test set, and an App build. For a migration, cover at least:
 
-- cold launch while signed out and signed in;
-- login, logout, and account-to-account switch;
+- cold launch while signed out and signed in, with identity published before CloudKit or other capability checks;
+- login, optional-cloud logout that keeps the last purchase identity, deletion/reset to anonymous, and account-to-account switch;
 - `.unknown`, `.free`, `.premium`, and grace-period access;
 - Current Offering and one Placement if Placements are used;
 - missing, empty, failed, and successful Offering loads;

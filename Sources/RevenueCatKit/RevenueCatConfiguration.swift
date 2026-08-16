@@ -88,7 +88,7 @@ extension RevenueCatClient {
     /// The latest account fact declared by the host App.
     ///
     /// Setting this value never configures the RevenueCat SDK by itself. A value declared before
-    /// `configure(_:)` is used as the SDK's initial identity, avoiding an anonymous login hop.
+    /// `configure(_:)` is applied with `logIn` after the SDK restores any persisted user.
     public enum DesiredIdentity: Sendable, Equatable {
         case anonymous
         case account(AppUserID)

@@ -406,15 +406,12 @@ private extension RevenueCatClient {
         }
 
         configuration = validatedConfiguration
-        let initialAppUserID: AppUserID?
-        if case .account(let appUserID) = effectiveDesiredIdentity {
-            initialAppUserID = appUserID
-        } else {
-            initialAppUserID = nil
-        }
+        // Restore any persisted RevenueCat user first. Passing an account ID into
+        // configure() would skip logIn aliasing and orphan purchases on an old
+        // anonymous ID.
         provider.configure(
             apiKey: validatedConfiguration.publicSDKKey.rawValue,
-            appUserID: initialAppUserID?.rawValue,
+            appUserID: nil,
             proxyURL: runtimeOptions.proxyURL,
             logLevel: runtimeOptions.logLevel
         )

@@ -98,7 +98,11 @@ client.setDesiredIdentity(.account(RevenueCatClient.AppUserID(accountID)))
 try await client.configure(configuration)
 ```
 
-`setDesiredIdentity(_:)` 是 App 唯一的身份入口。它可以在 `configure(_:)` 前调用；Kit 会把账号直接传给 RevenueCat 初始化，避免先创建匿名用户再登录。后续登录、登出或账号切换也只需重新声明最新身份。切换期间 `state.identityAlignment` 为 `.transitioning`，`state.accessLevel` 固定为 `.unknown`；失败会落到 `.failed(error)`，重复声明同一身份可显式重试。
+`setDesiredIdentity(_:)` 是 App 唯一的身份入口。它可以在 `configure(_:)` 前调用。首次 `configure` 不把账号传给 `Purchases.configure`，先恢复本机已有的 RevenueCat 用户，再用 `logIn` 对齐；这样旧匿名付费身份会被 alias，而不是被新 UUID 直接覆盖。账号事实一确定就应声明，不要等 CloudKit 或其他能力校验。后续登录或换号也走同一入口。
+
+`setDesiredIdentity(.anonymous)` 会让 Kit 调用 `Purchases.logOut()`。允许未登录购买的 App（`.anonymousAndIdentified`）在用户只退出云备份时，应保留上次确认的购买身份；只有首次无账号、删号，或明确要重置购买身份时才声明匿名。
+
+切换期间 `state.identityAlignment` 为 `.transitioning`，`state.accessLevel` 固定为 `.unknown`；失败会落到 `.failed(error)`，重复声明同一身份可显式重试。
 
 身份策略：
 
@@ -153,11 +157,12 @@ let offeringState = try await RevenueCatClient.shared.loadOffering(
 )
 ```
 
-App 使用 `OfferingSnapshot.purchaseOptions` 绘制自己的付费墙，并以不透明的 `PurchaseOptionID` 发起购买：
+App 使用 `OfferingSnapshot.purchaseOptions` 绘制自己的付费墙，并以不透明的 `PurchaseOptionID` 发起购买。数组顺序跟随 RevenueCat Dashboard，不是套餐默认值；若产品要默认终身或年付，按 `packageType` 选择。
 
 ```swift
 guard case .available(let offering) = offeringState,
-      let option = offering.purchaseOptions.first else {
+      let option = offering.purchaseOptions.first(where: { $0.packageType == .lifetime })
+        ?? offering.purchaseOptions.first else {
     return
 }
 
@@ -191,7 +196,7 @@ let outcome = try await RevenueCatClient.shared.restorePurchases()
 - App 源码没有直接 `import RevenueCat`，App target 没有直接链接 RevenueCat product。
 - App 只配置 Public SDK Key、Premium Entitlement ID、Identity Policy 和实际使用的 Placement ID。
 - 没有硬编码 Product ID、按 Product ID 分支或判断权益，也没有写死 Offering ID 或本地商品清单；快照里的 `productID` 只可用于诊断。
-- 登录态尚未确定时不抢先配置；稳定账号 ID 会在 `configure(_:)` 前通过 `setDesiredIdentity(_:)` 声明。
+- 账号事实尚未确定时不抢先配置；一旦知道稳定账号 ID 或确认无账号，就在 `configure(_:)` 前通过 `setDesiredIdentity(_:)` 声明，不等 CloudKit。首次配置必须先恢复本机 RevenueCat 用户再 `logIn`。可选登录的 App 退出云账号时不声明 `.anonymous`，并把上次购买身份持久化到冷启动。
 - `.unknown` 与 `.free` 分开处理，`.premiumInGracePeriod` 继续授予高级权限。
 - 付费墙完整处理 Offering 的 loading、missing、empty、failed 和 available 状态。
 - 购买只使用最新快照的 `PurchaseOptionID`，购买与恢复期间禁用重复提交。

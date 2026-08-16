@@ -116,15 +116,16 @@ final class RevenueCatConfigurationTests: XCTestCase {
         XCTAssertNil(client.state.entitlement)
     }
 
-    func testIdentifiedConfigurationPassesRuntimeAppUserIDDirectly() async throws {
+    func testIdentifiedConfigurationLogsInAfterRestoringPersistedIdentity() async throws {
         let provider = FakeRevenueCatProvider()
-        provider.customerInfoResponses = [.success(makeCustomerInfo(appUserID: "user-a"))]
+        provider.logInResponse = .success(makeCustomerInfo(appUserID: "user-a"))
         let client = RevenueCatClient(provider: provider)
         client.setDesiredIdentity(.account(" user-a "))
 
         try await client.configure(makeConfiguration(identityPolicy: .identifiedOnly))
 
-        XCTAssertEqual(provider.configuredAppUserID, "user-a")
+        XCTAssertNil(provider.configuredAppUserID)
+        XCTAssertEqual(provider.logInCallCount, 1)
         XCTAssertEqual(provider.configureCallCount, 1)
         XCTAssertEqual(client.state.currentAppUserID?.rawValue, "user-a")
         XCTAssertFalse(client.state.isAnonymous)
@@ -140,7 +141,8 @@ final class RevenueCatConfigurationTests: XCTestCase {
 
         try await client.configure(makeConfiguration())
 
-        XCTAssertEqual(provider.configuredAppUserID, "restored-user")
+        XCTAssertNil(provider.configuredAppUserID)
+        XCTAssertEqual(provider.logInCallCount, 0)
         XCTAssertEqual(client.state.currentAppUserID?.rawValue, "restored-user")
         XCTAssertFalse(client.state.isAnonymous)
     }
@@ -170,6 +172,7 @@ final class RevenueCatConfigurationTests: XCTestCase {
 
     func testInitialRefreshFailureCanRetryWithoutReconfigureOrSecondObserver() async throws {
         let provider = FakeRevenueCatProvider()
+        seedPersistedAccount(provider)
         provider.customerInfoResponses = [.failure(.network)]
         let client = RevenueCatClient(provider: provider)
         client.setDesiredIdentity(.account("user-a"))
@@ -191,6 +194,7 @@ final class RevenueCatConfigurationTests: XCTestCase {
 
     func testConcurrentConfigureIsBlockedBeforeSecondSDKCall() async throws {
         let provider = FakeRevenueCatProvider()
+        seedPersistedAccount(provider)
         provider.suspendCustomerInfo = true
         let client = RevenueCatClient(provider: provider)
         client.setDesiredIdentity(.account("user-a"))
