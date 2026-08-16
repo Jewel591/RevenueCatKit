@@ -1,6 +1,8 @@
 # RevenueCatKit
 
-可跨 App 复用的 RevenueCat 领域适配层。它把 RevenueCat SDK 转换成稳定的会员、商品和购买 API；各 App 只负责注入自己的业务事实并绘制自己的付费墙。
+面向同一维护方多个 App 复用的 RevenueCat 领域适配层。它把 RevenueCat SDK 转换成稳定的会员、商品和购买 API；各 App 只负责注入自己的业务事实并绘制自己的付费墙。
+
+仓库公开是为了简化 Swift Package 和 CI 依赖访问，不代表运行策略是面向所有外部 App 的中性默认值。`RevenueCatClient.shared` 会统一采用本仓库维护方的网络与日志策略，其中包括 RevenueCat 官方的 [`https://api.rc-backup.com/`](https://www.revenuecat.com/docs/getting-started/configuring-sdk) 备用代理，并且有意不允许各 App 覆盖。外部项目复用前应先审阅这些策略；不适用时请 fork 后按自身发布区域与运维要求调整。
 
 ## 安装
 

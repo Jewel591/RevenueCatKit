@@ -9,7 +9,7 @@ Use RevenueCatKit as the App's only subscription dependency. Keep RevenueCat Das
 
 ## Read the local contract
 
-Read the package `README.md` and current public declarations under `Sources/RevenueCatKit/` before changing an App. Do not reconstruct API names from memory.
+Read the package `README.md` and current public declarations under `Sources/RevenueCatKit/` before changing an App. Do not reconstruct API names from memory. Public repository visibility removes dependency authorization friction; it does not make the package's maintainer-owned proxy and logging policies neutral defaults for unrelated apps.
 
 Read [references/integration-reference.md](references/integration-reference.md) when writing new integration code or migrating an existing App. Adapt its names to the target App instead of copying product or account identifiers.
 
