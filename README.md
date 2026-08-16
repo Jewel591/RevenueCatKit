@@ -90,16 +90,25 @@ let configuration = RevenueCatClient.Configuration(
     premiumEntitlementID: "premium",
     identityPolicy: .anonymousAndIdentified
 )
-
-client.setDesiredIdentity(.anonymous)
-try await client.configure(configuration)
 ```
 
-若 App 启动时已经拥有稳定账号 ID，先声明运行时身份，再配置 SDK：
+若启动时已有稳定账号 ID（含上次确认并落盘的购买身份），先声明再配置：
 
 ```swift
 client.setDesiredIdentity(.account(RevenueCatClient.AppUserID(accountID)))
 try await client.configure(configuration)
+```
+
+若 persist key 还不存在、也没有账号会话，先不要声明身份。无 desired identity 地 `configure`，再按恢复结果认领或确认匿名：
+
+```swift
+try await client.configure(configuration)
+if client.state.isAnonymous == false,
+   let restoredID = client.state.currentAppUserID {
+    client.setDesiredIdentity(.account(restoredID))
+} else {
+    client.setDesiredIdentity(.anonymous)
+}
 ```
 
 `setDesiredIdentity(_:)` 是 App 唯一的身份入口。它可以在 `configure(_:)` 前调用。首次 `configure` 不把账号传给 `Purchases.configure`，先恢复本机已有的 RevenueCat 用户，再用 `logIn` 对齐；这样旧匿名付费身份会被 alias，而不是被新 UUID 直接覆盖。账号事实一确定就应声明，不要等 CloudKit 或其他能力校验。后续登录或换号也走同一入口。
@@ -202,7 +211,7 @@ let outcome = try await RevenueCatClient.shared.restorePurchases()
 - App 源码没有直接 `import RevenueCat`，App target 没有直接链接 RevenueCat product。
 - App 只配置 Public SDK Key、Premium Entitlement ID、Identity Policy 和实际使用的 Placement ID。
 - 没有硬编码 Product ID、按 Product ID 分支或判断权益，也没有写死 Offering ID 或本地商品清单；快照里的 `productID` 只可用于诊断。
-- 账号事实尚未确定时不抢先配置；一旦知道稳定账号 ID，就在 `configure(_:)` 前通过 `setDesiredIdentity(_:)` 声明，不等 CloudKit。首次配置必须先恢复本机 RevenueCat 用户再 `logIn`。可选登录的 App 退出云账号时不声明 `.anonymous`，并把上次购买身份持久化到冷启动。persist key 还不存在且没有账号会话时，先 configure 认领本机 identified 用户，不要先发匿名。网络/前台要对齐失败重复声明同一身份。
+- 已有稳定账号 ID 时，在 `configure(_:)` 前通过 `setDesiredIdentity(.account)` 声明，不等 CloudKit。账号事实还在加载时不要声明身份，也不要为了“先启动 SDK”而发 `.anonymous`。persist key 不存在且没有账号会话时，先无 desired identity 地 `configure`，再按恢复结果认领 identified 用户或确认匿名。首次配置必须先恢复本机 RevenueCat 用户再 `logIn`。可选登录的 App 退出云账号时不声明 `.anonymous`，并把上次购买身份持久化到冷启动。删号或明确重置才声明匿名。网络/前台要对齐失败重复声明同一身份。
 - `.unknown` 与 `.free` 分开处理，`.premiumInGracePeriod` 继续授予高级权限。
 - 付费墙完整处理 Offering 的 loading、missing、empty、failed 和 available 状态。
 - 购买只使用最新快照的 `PurchaseOptionID`，购买与恢复期间禁用重复提交。
