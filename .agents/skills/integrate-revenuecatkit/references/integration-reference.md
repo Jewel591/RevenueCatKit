@@ -28,7 +28,7 @@ The Public SDK Key is App-specific public configuration, not a server secret. Th
 
 Do not treat “the authentication SDK has not answered yet” as signed out. As soon as the App knows the account fact — a stored user ID, or confirmed first-launch anonymity — declare exactly one desired RevenueCat identity. Do not wait for CloudKit, dataset owner checks, or other capability verification; those gate backup, not purchases.
 
-`setDesiredIdentity(.anonymous)` logs the RevenueCat user out. Use it for first launch with no account, account deletion, or an intentional purchase-identity reset. Do not use it for “user signed out of optional cloud backup.”
+`setDesiredIdentity(.anonymous)` logs the RevenueCat user out. Do not use it for “user signed out of optional cloud backup.” Do not use it on first launch just because the App persist key and account session are both missing — that is the upgrade path where RevenueCat may still hold an identified paid user. Configure first, then adopt the restored identity. Use `.anonymous` only after the restored user is actually anonymous, or for account deletion / an intentional reset.
 
 ```swift
 import RevenueCatKit
@@ -78,24 +78,33 @@ final class MembershipIdentityCoordinator {
 }
 ```
 
-Calling `publish(.signedIn(accountID:))` or `publish(.resetToAnonymous)` before awaiting configuration lets the Kit restore any persisted RevenueCat user, then `logIn` or `logOut` to match. Persist `.signedIn` across process launches if the App allows signed-out purchases. Publish later login, deletion, and account switch through the same coordinator. The example intentionally does nothing for `.unresolved`, so a cold launch never manufactures a signed-out RevenueCat identity while the account fact is still loading. `.signedOutKeepingPurchases` leaves the last confirmed identity in place.
+Calling `publish(.signedIn(accountID:))` before awaiting configuration lets the Kit restore any persisted RevenueCat user, then `logIn` to match. Persist `.signedIn` across process launches if the App allows signed-out purchases. Publish later login, deletion, and account switch through the same coordinator. The example intentionally does nothing for `.unresolved`, so a cold launch never manufactures a signed-out RevenueCat identity while the account fact is still loading. `.signedOutKeepingPurchases` leaves the last confirmed identity in place.
 
-For an App whose authentication layer already guarantees a resolved optional account ID, the bridge may be a smaller function. Only map `nil` to `.anonymous` when identity was never resolved or you are resetting purchases:
+If the persist key is missing and there is no account session, configure first, then adopt the restored user. Do not map “unresolved + nil session” to `.anonymous`:
 
 ```swift
 @MainActor
-func publishKnownAccountFact(_ accountID: String?, hasResolvedIdentity: Bool) {
-    if let accountID {
-        RevenueCatClient.shared.setDesiredIdentity(.account(.init(accountID)))
+func publishKnownAccountFact(_ accountID: String?) {
+    guard let accountID, !accountID.isEmpty else { return }
+    RevenueCatClient.shared.setDesiredIdentity(.account(.init(accountID)))
+}
+
+@MainActor
+func adoptRestoredPurchaseIdentityIfNeeded() async throws {
+    let client = RevenueCatClient.shared
+    try await client.configure(AppMonetizationConfiguration.revenueCat)
+
+    if client.state.isAnonymous == false,
+       let restoredID = client.state.currentAppUserID {
+        client.setDesiredIdentity(.account(restoredID))
         return
     }
-    if !hasResolvedIdentity {
-        RevenueCatClient.shared.setDesiredIdentity(.anonymous)
-    }
+
+    client.setDesiredIdentity(.anonymous)
 }
 ```
 
-Never call RevenueCat SDK `logIn` or `logOut` from the App. During alignment, `client.state.identityAlignment` is `.transitioning` and access is `.unknown`. If alignment fails, repeating the same desired identity explicitly retries it.
+Never call RevenueCat SDK `logIn` or `logOut` from the App. During alignment, `client.state.identityAlignment` is `.transitioning` and access is `.unknown`. If alignment fails, repeating the same desired identity explicitly retries it — do that on network and foreground recovery, not only when the paywall opens.
 
 ## 3. Inject the observable client into SwiftUI
 
@@ -247,7 +256,8 @@ Every remaining match needs an explicit reason. Tests may mention forbidden patt
 Verify with the package tests, the App's smallest membership test set, and an App build. For a migration, cover at least:
 
 - cold launch while signed out and signed in, with identity published before CloudKit or other capability checks;
-- login, optional-cloud logout that keeps the last purchase identity, deletion/reset to anonymous, and account-to-account switch;
+- login, optional-cloud logout that keeps the last purchase identity, first upgrade with no persist key plus an already-identified RevenueCat user, deletion/reset to anonymous, and account-to-account switch;
+- alignment `.failed` retried on network and foreground recovery;
 - `.unknown`, `.free`, `.premium`, and grace-period access;
 - Current Offering and one Placement if Placements are used;
 - missing, empty, failed, and successful Offering loads;
