@@ -1,10 +1,10 @@
 # RevenueCatKit
 
-公司内部统一的 RevenueCat 领域适配层。它把 RevenueCat SDK 转换成稳定的会员、商品和购买 API；各 App 只负责注入自己的业务事实并绘制自己的付费墙。
+可跨 App 复用的 RevenueCat 领域适配层。它把 RevenueCat SDK 转换成稳定的会员、商品和购买 API；各 App 只负责注入自己的业务事实并绘制自己的付费墙。
 
 ## 安装
 
-仓库为公司私有 Swift Package。先确保开发机或 CI 对 GitHub 私有仓库有读取权限，再在 Xcode 的 **Package Dependencies** 中添加：
+这是一个公开的 Swift Package。在 Xcode 的 **Package Dependencies** 中添加：
 
 ```text
 https://github.com/Jewel591/RevenueCatKit.git
@@ -12,15 +12,18 @@ https://github.com/Jewel591/RevenueCatKit.git
 
 生产项目应依赖已发布的语义化版本。跨仓库联调尚未发布的版本时，可以短期固定到一个完整 commit SHA，避免跟踪可变分支；发布后再切回版本约束。App target 只链接 `RevenueCatKit` product，不再直接链接或 `import RevenueCat`。
 
-### Xcode Cloud 与私有仓库
+### Xcode Cloud
 
-Xcode Cloud 读取私有 Swift Package 需要通过两层独立闸门，缺一不可：
+公开的 `RevenueCatKit` 主仓库不需要额外的私有仓库授权。将 App 工程生成的 `Package.resolved` 提交到 `$PROJECT.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`，让 Xcode Cloud 与本地构建解析同一版本；不要依赖云端自动选择版本，也不要把该文件加入 `.gitignore`。
+
+#### 私有 fork 或内部镜像
+
+如果项目改为依赖私有 fork 或内部镜像，Xcode Cloud 需要通过两层独立闸门，缺一不可：
 
 1. **GitHub App installation 权限**：个人仓库走 **GitHub Settings → Applications → Installed GitHub Apps → Xcode Cloud → Configure**；Organization 仓库走对应的 Organization Settings。在 **Repository access** 中选择 **All repositories**，或在 **Only select repositories** 中明确加入 App 源码仓库和 `RevenueCatKit`。`All repositories` 已经包含当前及未来仓库，是合法配置。
-2. **每个 Xcode Cloud product 的依赖批准**：进入 **App Store Connect → Apps → 目标 App → Xcode Cloud → Settings → Repositories → Additional Repositories**，确认 `RevenueCatKit` 位于 **Access Granted**。这项批准按 App / Xcode Cloud product 保存；同一 App 的 workflows 共用，但另一个 App 仍需在自己的 Settings 中批准一次。GitHub 选择 `All repositories` 不会替所有 App 自动完成这一层。
-3. 将 App 工程生成的 `Package.resolved` 提交到 `$PROJECT.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`。Xcode Cloud 使用它解析精确依赖，不要依赖云端自动解析，也不要把它加入 `.gitignore`。
+2. **每个 Xcode Cloud product 的依赖批准**：进入 **App Store Connect → Apps → 目标 App → Xcode Cloud → Settings → Repositories → Additional Repositories**，确认私有依赖位于 **Access Granted**。这项批准按 App / Xcode Cloud product 保存；同一 App 的 workflows 共用，但另一个 App 仍需在自己的 Settings 中批准一次。GitHub 选择 `All repositories` 不会替所有 App 自动完成这一层。
 
-新依赖通常在 Xcode Cloud 尝试解析后才会出现在 **Additional Repositories**。如果列表尚未发现 `RevenueCatKit`，先触发一次构建；依赖解析失败后，从 build report 或上述 Settings 路径批准仓库，再重新构建。验证时不要只看 GitHub App 页面：必须确认 **Additional Repositories → Access Granted**，或以一次真实云构建成功为准。
+新的私有依赖通常在 Xcode Cloud 尝试解析后才会出现在 **Additional Repositories**。如果列表尚未发现目标仓库，先触发一次构建；依赖解析失败后，从 build report 或上述 Settings 路径批准仓库，再重新构建。验证时不要只看 GitHub App 页面：必须确认 **Additional Repositories → Access Granted**，或以一次真实云构建成功为准。
 
 不要把 Personal Access Token、SSH 私钥或其他 GitHub 凭据提交到工程中。若 Installed Apps 中没有 Xcode Cloud，由拥有仓库 admin 权限（Organization 通常为 owner）的人完成首次安装。
 
@@ -197,3 +200,7 @@ let outcome = try await RevenueCatClient.shared.restorePurchases()
 - 恢复购买入口、协议和隐私入口不因 Offering 加载失败而消失。
 - App 自己负责本地化错误文案；用户可见文本不直接展示 SDK 错误或内部标识符。
 - 至少覆盖配置、身份切换、权益映射、Offering 降级、购买/恢复结果和“App 不直连 SDK”的回归测试。
+
+## License
+
+RevenueCatKit 使用 [MIT License](LICENSE)。
