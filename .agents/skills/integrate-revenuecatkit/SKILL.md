@@ -19,7 +19,7 @@ Also read and obey the target repository's `AGENTS.md` or equivalent instruction
 
 1. Inspect the App's authentication lifecycle, current subscription wrapper, paywall surfaces, tests, package graph, and all direct RevenueCat imports.
 2. Confirm the RevenueCat Dashboard has the Store App, Public SDK Key, premium Entitlement, products, Current Offering, and any required Placements. Treat Dashboard facts as prerequisites; do not compensate for missing remote configuration with hard-coded product catalogs.
-3. Add only the `RevenueCatKit` product to App targets. Remove direct RevenueCat imports and product dependencies after the migration compiles.
+3. Add only the `RevenueCatKit` product to App targets. Remove direct RevenueCat imports and product dependencies after the migration compiles. For Xcode Cloud, commit the App project's `Package.resolved` and verify that the connected SCM provider's GitHub App installation can read this private repository. Reuse provider/repository access where available; never add a token or SSH key to source control.
 4. Define one App-owned configuration containing only the Public SDK Key, premium Entitlement ID, and Identity Policy. Do not hard-code Product IDs or Offering IDs, and never branch on them. A `PurchaseOption.productID` received from the Kit may be recorded only as diagnostics. Define Placement IDs only for real App presentation locations.
 5. Wait until the App's account session is resolved. Call `setDesiredIdentity(_:)` before the first `configure(_:)`; use the App's stable opaque account ID, never an email, display name, Store transaction ID, or RevenueCat anonymous ID. Publish every later login, logout, and account switch through the same identity entry point.
 6. Gate access only with `AccessLevel`. Preserve `.unknown`; grant premium access for `.premium` and `.premiumInGracePeriod`.
@@ -41,6 +41,6 @@ Do not add RevenueCat Paywalls UI to this package. Do not expose RevenueCat SDK 
 
 ## Review the result
 
-Before declaring the migration complete, search the entire App source and project file for direct RevenueCat usage. Verify that unknown identity or entitlement state cannot unlock or deny access prematurely, stale purchase handles cannot survive an Offering refresh or identity switch, and failures never expose a previous Offering as purchasable.
+Before declaring the migration complete, search the entire App source and project file for direct RevenueCat usage. Verify that unknown identity or entitlement state cannot unlock or deny access prematurely, stale purchase handles cannot survive an Offering refresh or identity switch, and failures never expose a previous Offering as purchasable. For an Xcode Cloud consumer, also verify that the shared `Package.resolved` records RevenueCatKit and that the private repository is included in the relevant GitHub App installation's repository access.
 
 Report any RevenueCat Dashboard steps that code cannot verify. State explicitly whether persistent data models, schemas, migrations, synchronization, or backup formats changed.

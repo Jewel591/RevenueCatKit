@@ -12,6 +12,21 @@ https://github.com/Jewel591/RevenueCatKit.git
 
 生产项目应依赖已发布的语义化版本。跨仓库联调尚未发布的版本时，可以短期固定到一个完整 commit SHA，避免跟踪可变分支；发布后再切回版本约束。App target 只链接 `RevenueCatKit` product，不再直接链接或 `import RevenueCat`。
 
+### Xcode Cloud 与私有仓库
+
+Xcode Cloud 的授权对象是 **SCM provider / GitHub App installation 可以读取的具体仓库**，不是每条 workflow 单独保存的一份账号密码：
+
+1. 在 GitHub 的 Apple/Xcode Cloud GitHub App repository access 中，明确加入 App 源码仓库和 `RevenueCatKit`。不要因为个人 GitHub 账号能 clone，就假定云端也能读取。
+2. 同一个 App Store Connect 团队、同一个 GitHub provider connection 和同一个 GitHub App installation 下，`RevenueCatKit` 一旦已经对 Xcode Cloud 可见，其他 App 的 workflow 可以复用这项仓库访问，不需要为每条 workflow 再配置 token。
+3. 每个新 App 仍要完成自己的 Xcode Cloud onboarding 和源码仓库连接。换 App Store Connect 团队、GitHub organization/provider 或 GitHub App installation 时，需要在新的授权边界重新加入 `RevenueCatKit`。
+4. 将 App 工程生成的 `Package.resolved` 提交到 `$PROJECT.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`。Xcode Cloud 使用它解析精确依赖，不要依赖云端自动解析，也不要把它加入 `.gitignore`。
+
+若首次构建因 private dependency 权限失败，从该 build report 进入修复流程，让 Xcode 或 App Store Connect 引导补齐 SCM connection。不要把 Personal Access Token、SSH 私钥或其他 GitHub 凭据提交到工程中。
+
+GitHub 中的具体入口：个人仓库走 **Settings → Applications → Installed GitHub Apps → Xcode Cloud → Configure**；Organization 仓库走 **Organization Settings → GitHub Apps / Installed GitHub Apps → Xcode Cloud → Configure**。在 **Repository access** 中把 `RevenueCatKit` 加入所选仓库。若 Installed Apps 中没有 Xcode Cloud，由拥有仓库 admin 权限（Organization 通常为 owner）的人完成首次安装；也可以让首次构建失败，再从 build report 的修复入口进入同一授权流程。
+
+Apple 正身文档：[Making dependencies available to Xcode Cloud](https://developer.apple.com/documentation/xcode/making-dependencies-available-to-xcode-cloud)、[Connecting Xcode Cloud to GitHub](https://developer.apple.com/documentation/xcode/connecting-xcode-cloud-to-github)。
+
 接入前还要在 RevenueCat Dashboard 完成 App 侧业务配置：
 
 1. 为目标 App 添加对应的 Store App 和 Public SDK Key。
