@@ -4,7 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "RevenueCatKit",
-    platforms: [.iOS(.v17), .macOS(.v15)],
+    platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
         .library(
             name: "RevenueCatKit",
@@ -12,7 +12,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/RevenueCat/purchases-ios-spm.git", from: "5.0.0"),
+        .package(url: "https://github.com/RevenueCat/purchases-ios-spm.git", from: "5.81.0"),
     ],
     targets: [
         .target(
@@ -20,6 +20,10 @@ let package = Package(
             dependencies: [
                 .product(name: "RevenueCat", package: "purchases-ios-spm"),
             ]
+        ),
+        .testTarget(
+            name: "RevenueCatKitTests",
+            dependencies: ["RevenueCatKit"]
         ),
     ]
 )

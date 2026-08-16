@@ -1,0 +1,4 @@
+interface:
+  display_name: "Integrate RevenueCatKit"
+  short_description: "Safely integrate the shared subscription layer"
+  default_prompt: "Use $integrate-revenuecatkit to integrate or migrate this Apple app to RevenueCatKit."
