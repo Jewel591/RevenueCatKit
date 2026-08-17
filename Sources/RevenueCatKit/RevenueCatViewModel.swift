@@ -30,7 +30,10 @@
 // - 修复：configurationContinuations 改为数组，支持多个并发等待者
 // - 修复：refreshSubscriptionStatus() 在 closure 内部检查配置状态，避免竞态
 
-import RevenueCat
+// Re-export RevenueCat so host Apps can use Package / StoreProduct / PackageType
+// through `import RevenueCatKit` only. Direct `import RevenueCat` is not part of
+// the supported host integration surface.
+@_exported import RevenueCat
 import StoreKit
 import SwiftUI
 import os
