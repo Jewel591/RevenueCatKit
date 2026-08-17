@@ -1,5 +1,10 @@
 // MARK: - 更新记录
 
+// 2026-08-16
+// - 恢复：曾确认会员突然收到空 entitlement 时进入 7 天降级宽限，
+//   且 restore 按宽限后的有效会员状态返回。Key 与 CodeCat 旧 build 对齐，
+//   避免覆盖 cachedPremiumAccess 后回滚也无法再进入宽限。
+
 // 2026-03-27
 // - 新增：#if DEBUG 的 setPreviewPremiumAccess(_:status:)，用于 SwiftUI Preview 模拟会员状态
 
@@ -111,6 +116,14 @@ public final class RevenueCatViewModel {
     private var hasSyncedBefore: Bool {
         get { UserDefaults.standard.bool(forKey: "hasSyncedPremiumAccess") }
         set { UserDefaults.standard.set(newValue, forKey: "hasSyncedPremiumAccess") }
+    }
+
+    /// 首次观测到已确认会员被服务端撤销的时间。`0` 表示当前不在宽限观察中。
+    /// Key 必须与 CodeCat 旧 build 一致。
+    @ObservationIgnored
+    private var revocationFirstSeenAt: TimeInterval {
+        get { UserDefaults.standard.double(forKey: PremiumRevocationGrace.firstSeenAtKey) }
+        set { UserDefaults.standard.set(newValue, forKey: PremiumRevocationGrace.firstSeenAtKey) }
     }
 
     /// 当前订阅状态
@@ -409,7 +422,7 @@ public final class RevenueCatViewModel {
 
     /// 恢复购买
     public func restorePurchases() async throws -> Bool {
-        guard let config else { return false }
+        guard config != nil else { return false }
 
         logger.info("开始恢复购买")
 
@@ -421,8 +434,10 @@ public final class RevenueCatViewModel {
 
             updateSubscriptionStatus(from: customerInfo)
 
-            let success =
-                customerInfo.entitlements[config.entitlementID]?.isActive == true
+            // 用更新后的有效会员状态（含降级宽限期）判定成功与否，
+            // 而不是原始 CustomerInfo：宽限期内用户实际保有权益，
+            // 若按原始数据返回 false，会出现「提示恢复失败但会员仍在」的矛盾反馈
+            let success = hasPremiumAccess == true
             if success {
                 logger.info("成功恢复购买")
                 showPaywall = false
@@ -450,6 +465,21 @@ public final class RevenueCatViewModel {
 
         // 检查是否有活跃权限
         let isActive = customerInfo.entitlements[config.entitlementID]?.isActive == true
+
+        let grace = PremiumRevocationGrace.outcome(
+            isEntitlementActive: isActive,
+            hasSyncedBefore: hasSyncedBefore,
+            cachedPremiumAccess: cachedPremiumAccess,
+            firstSeenAt: revocationFirstSeenAt,
+            now: Date().timeIntervalSince1970
+        )
+        revocationFirstSeenAt = grace.storedFirstSeenAt
+        if !grace.shouldApplyServerStatus {
+            hasPremiumAccess = true
+            logger.warning("服务端撤销了已确认的会员权益，处于 7 天降级宽限期内，保持会员状态")
+            return
+        }
+
         hasPremiumAccess = isActive
         cachedPremiumAccess = isActive
         hasSyncedBefore = true

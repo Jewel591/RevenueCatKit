@@ -21,5 +21,9 @@ let package = Package(
                 .product(name: "RevenueCat", package: "purchases-ios-spm"),
             ]
         ),
+        .testTarget(
+            name: "RevenueCatKitTests",
+            dependencies: ["RevenueCatKit"]
+        ),
     ]
 )
