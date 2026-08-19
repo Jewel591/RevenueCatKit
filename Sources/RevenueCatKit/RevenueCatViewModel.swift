@@ -454,8 +454,10 @@ public final class RevenueCatViewModel {
 
     // MARK: - Helper Methods
 
-    /// 刷新用户会员信息（公开方法，用于下拉刷新）
-    public func refreshCustomerInfo() async {
+    /// 刷新用户会员信息（公开方法，用于下拉刷新）。
+    /// - Returns: 是否从 RevenueCat 成功取得当前 CustomerInfo。
+    @discardableResult
+    public func refreshCustomerInfo() async -> Bool {
         await refreshSubscriptionStatus()
     }
 
@@ -521,7 +523,8 @@ public final class RevenueCatViewModel {
     }
 
     /// 刷新用户订阅状态（从服务器获取最新数据）
-    public func refreshSubscriptionStatus() async {
+    @discardableResult
+    public func refreshSubscriptionStatus() async -> Bool {
         // 确保 RevenueCat 已配置（防止竞态条件）
         if !isRevenueCatConfigured {
             let configuredInTime = await withTaskGroup(of: Bool.self) { group in
@@ -550,16 +553,18 @@ public final class RevenueCatViewModel {
 
             guard configuredInTime, isRevenueCatConfigured else {
                 logger.error("RevenueCat 配置超时（5秒），无法刷新订阅状态")
-                return
+                return false
             }
         }
 
         do {
-            let customerInfo = try await Purchases.shared.customerInfo()
+            let customerInfo = try await Purchases.shared.customerInfo(fetchPolicy: .fetchCurrent)
             updateSubscriptionStatus(from: customerInfo)
+            return true
         } catch {
             logger.error("刷新订阅状态失败: \(error.localizedDescription)")
             // 网络失败时保留当前状态，避免付费用户因网络问题被误判为免费用户
+            return false
         }
     }
 
