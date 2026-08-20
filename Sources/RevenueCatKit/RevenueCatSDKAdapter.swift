@@ -111,10 +111,15 @@ final class RevenueCatSDKAdapter: RevenueCatProviding {
                     localizedPrice: package.storeProduct.localizedPriceString,
                     currencyCode: package.storeProduct.currencyCode,
                     subscriptionPeriod: package.storeProduct.subscriptionPeriod?.companyValue,
-                    introductoryOffer: package.storeProduct.introductoryDiscount.map {
-                        IntroductoryOffer(
+                    introductoryOffer: package.storeProduct.introductoryDiscount.flatMap {
+                        guard let subscriptionPeriod = $0.subscriptionPeriod.companyValue else {
+                            return nil
+                        }
+                        return IntroductoryOffer(
                             localizedPrice: $0.localizedPriceString,
-                            paymentMode: $0.paymentMode.companyValue
+                            paymentMode: $0.paymentMode.companyValue,
+                            subscriptionPeriod: subscriptionPeriod,
+                            numberOfPeriods: $0.numberOfPeriods
                         )
                     },
                     productID: package.storeProduct.productIdentifier

@@ -103,6 +103,18 @@ final class PremiumRevocationGrace {
         clear(identity: identity)
     }
 
+    /// RevenueCat aliases an anonymous user into the first identified account during `logIn`.
+    /// Copy only that anonymous provenance; identified account switches and logout must not carry it.
+    func transferAnonymousProvenance(from sourceIdentity: String, to targetIdentity: String) {
+        guard sourceIdentity != targetIdentity,
+              defaults.bool(forKey: Key.hasConfirmedPremium(sourceIdentity)) else { return }
+        defaults.set(true, forKey: Key.hasConfirmedPremium(targetIdentity))
+        defaults.set(
+            defaults.double(forKey: Key.firstSeenAt(sourceIdentity)),
+            forKey: Key.firstSeenAt(targetIdentity)
+        )
+    }
+
     private func clear(identity: String) {
         defaults.set(false, forKey: Key.hasConfirmedPremium(identity))
         defaults.set(0, forKey: Key.firstSeenAt(identity))

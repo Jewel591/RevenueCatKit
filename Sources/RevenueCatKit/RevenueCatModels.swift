@@ -243,10 +243,19 @@ public struct IntroductoryOffer: Sendable, Equatable {
 
     public let localizedPrice: String
     public let paymentMode: PaymentMode
+    public let subscriptionPeriod: SubscriptionPeriod
+    public let numberOfPeriods: Int
 
-    public init(localizedPrice: String, paymentMode: PaymentMode) {
+    public init(
+        localizedPrice: String,
+        paymentMode: PaymentMode,
+        subscriptionPeriod: SubscriptionPeriod,
+        numberOfPeriods: Int
+    ) {
         self.localizedPrice = localizedPrice
         self.paymentMode = paymentMode
+        self.subscriptionPeriod = subscriptionPeriod
+        self.numberOfPeriods = numberOfPeriods
     }
 }
 

@@ -204,6 +204,24 @@ func plans(for state: OfferingLoadState) -> some View {
 
 Use `PurchaseOption.localizedTitle`, `localizedDescription`, `localizedPrice`, `subscriptionPeriod`, and `packageType` to draw the App's paywall. Do not use Product ID for UI branching. RevenueCatKit deliberately preserves Product ID only for diagnostics.
 
+An `introductoryOffer` describes dashboard product metadata, not the current Apple Account's right to receive it. Before showing introductory copy, query the visible option and advertise the offer only for `.eligible`. Both `.ineligible` and `.unknown` must show the normal price without an introductory claim:
+
+```swift
+let eligibility = try await RevenueCatClient.shared.checkIntroEligibility(for: option.id)
+if eligibility == .eligible, let offer = option.introductoryOffer {
+    IntroductoryCopy(
+        price: offer.localizedPrice,
+        period: offer.subscriptionPeriod,
+        numberOfPeriods: offer.numberOfPeriods,
+        paymentMode: offer.paymentMode
+    )
+} else {
+    StandardPriceCopy(price: option.localizedPrice)
+}
+```
+
+Use both `subscriptionPeriod` and `numberOfPeriods`: a one-week free trial and a discounted price charged for three months are not equivalent offers.
+
 `purchaseOptions` keeps RevenueCat Dashboard order. That is not a product default. If the App previously selected lifetime or annual, pick by `packageType`; do not use `.first`.
 
 ## 5. Purchase and restore

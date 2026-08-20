@@ -271,7 +271,14 @@ func makeProviderOffering(
                 localizedPrice: "$9.99",
                 currencyCode: "USD",
                 subscriptionPeriod: .init(value: 1, unit: .month),
-                introductoryOffer: .init(localizedPrice: "$4.99", paymentMode: .payUpFront),
+                introductoryOffer: SubscriptionPeriod(value: 1, unit: .year).map {
+                    .init(
+                        localizedPrice: "$4.99",
+                        paymentMode: .payUpFront,
+                        subscriptionPeriod: $0,
+                        numberOfPeriods: 1
+                    )
+                },
                 productID: "premium.monthly"
             ),
         ]

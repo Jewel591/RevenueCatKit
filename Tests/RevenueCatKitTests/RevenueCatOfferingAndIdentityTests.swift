@@ -40,10 +40,12 @@ final class RevenueCatOfferingAndIdentityTests: XCTestCase {
         XCTAssertEqual(snapshot.offeringID, "dashboard-fallback")
         XCTAssertEqual(snapshot.placement, .init("feature_gate"))
         XCTAssertEqual(snapshot.purchaseOptions.count, 1)
-        XCTAssertEqual(
-            snapshot.purchaseOptions.first?.introductoryOffer,
-            .init(localizedPrice: "$4.99", paymentMode: .payUpFront)
-        )
+        let introductoryOffer = snapshot.purchaseOptions.first?.introductoryOffer
+        XCTAssertEqual(introductoryOffer?.localizedPrice, "$4.99")
+        XCTAssertEqual(introductoryOffer?.paymentMode, .payUpFront)
+        XCTAssertEqual(introductoryOffer?.subscriptionPeriod.value, 1)
+        XCTAssertEqual(introductoryOffer?.subscriptionPeriod.unit, .year)
+        XCTAssertEqual(introductoryOffer?.numberOfPeriods, 1)
     }
 
     func testProviderFailureIsNotConflatedWithMissingOffering() async throws {
