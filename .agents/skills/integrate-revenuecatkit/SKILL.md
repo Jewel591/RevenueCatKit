@@ -26,7 +26,7 @@ Also read and obey the target repository's `AGENTS.md` or equivalent instruction
 7. Render the App's own paywall from `OfferingLoadState` and `OfferingSnapshot`. Use `.current` by default and `.placement(...)` only for configured RevenueCat Placements. Purchase with the latest `PurchaseOptionID` returned by that exact scope snapshot.
 8. Handle `RevenueCatClient.PurchaseOutcome`, `RevenueCatClient.RestoreOutcome`, and `RevenueCatClientError` explicitly. Keep user-facing localized copy in the App. Keep restore, privacy, and terms actions available even when Offerings fail.
 9. Delete App-owned CustomerInfo mapping, Offering mirrors, purchase locks, SDK delegates, error-code switches, and product-based entitlement logic that RevenueCatKit now owns. Retain only App semantics, identity/session bridging, paywall UI, and localized presentation.
-10. Build and run the smallest relevant tests. Add a regression guard that rejects direct `import RevenueCat` across every source root compiled into the App, including shared and extension-owned directories, and rejects direct RevenueCat package/product objects in App targets.
+10. Build and run the smallest relevant tests, then run product-playbook's `revenuecat-kit-lint`. The lint rejects direct RevenueCat imports and package/product links across application-target source roots; do not duplicate that structural scan in the App test target.
 
 ## Preserve these boundaries
 
@@ -38,6 +38,13 @@ Also read and obey the target repository's `AGENTS.md` or equivalent instruction
 - The App draws the paywall and owns its copy, analytics context, campaign context, and navigation.
 
 Do not add RevenueCat Paywalls UI to this package. Do not expose RevenueCat SDK types through App APIs. Do not hard-code Product IDs or use them to infer membership duration, access, or UI. A Product ID already present in a Kit snapshot may be logged only for diagnostics when necessary.
+
+## Host test boundary
+
+- Test the App-owned Public SDK key/entitlement/identity policy, `AccessLevel` to product-access mapping, account-session identity chokepoints, paywall state rendering, localized error mapping, purchase/restore routing, and any real shipped identity persistence migration.
+- Configure/identity alignment, Offering refresh, stale handle rejection, purchase/restore serialization, normalized error mechanics, and SDK state transitions are RevenueCatKit contracts. Do not reconstruct those state machines in every App.
+- Do not read `project.pbxproj`, scan imports/source strings, assert old wrapper-file absence, or search direct SDK products from XCTest. `revenuecat-kit-lint` owns those structural checks.
+- Use public Kit API plus fakes and deterministic App-owned mappers; never hit RevenueCat production from unit tests. If two Apps copy the same helper or expectation, move the missing semantic seam and its tests into RevenueCatKit rather than publishing a shared TestSupport product.
 
 ## Review the result
 
