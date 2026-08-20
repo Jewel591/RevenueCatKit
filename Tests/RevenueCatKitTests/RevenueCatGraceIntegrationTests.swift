@@ -8,7 +8,7 @@ final class RevenueCatGraceIntegrationTests: XCTestCase {
         var value: TimeInterval = 10_000
     }
 
-    func testConfigureMigratesLegacyAnonymousGraceThroughValidatedAliasButNotAccountSwitch() async throws {
+    func testConfigureMigratesLegacyAnonymousGraceOnlyToNewAliasTargetAndNotAccountSwitch() async throws {
         guard let context = makeContext() else { return XCTFail("Missing isolated defaults") }
         defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
         let defaults = context.defaults
@@ -42,6 +42,32 @@ final class RevenueCatGraceIntegrationTests: XCTestCase {
         }
         XCTAssertTrue(didAlign)
         XCTAssertEqual(client.state.accessLevel, .free)
+    }
+
+    func testConfigureNeverMigratesLegacyAnonymousGraceToExistingAccount() async throws {
+        guard let context = makeContext() else { return XCTFail("Missing isolated defaults") }
+        defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
+        let defaults = context.defaults
+        defaults.set(true, forKey: "hasSyncedPremiumAccess")
+        defaults.set(true, forKey: "cachedPremiumAccess")
+        defaults.set(9_000, forKey: "premiumRevocationFirstSeenAt")
+
+        let provider = FakeRevenueCatProvider()
+        provider.appUserID = "$RCAnonymousID:legacy"
+        provider.isAnonymous = true
+        provider.logInCreated = false
+        provider.logInResponse = .success(makeCustomerInfo(appUserID: "existing-user"))
+        let client = makeClient(provider: provider, defaults: defaults, clock: context.clock)
+        client.setDesiredIdentity(.account("existing-user"))
+
+        try await client.configure(makeConfiguration())
+
+        XCTAssertEqual(client.state.identityAlignment, .matching)
+        XCTAssertEqual(client.state.currentAppUserID, .init("existing-user"))
+        XCTAssertEqual(client.state.accessLevel, .free)
+        XCTAssertTrue(defaults.bool(forKey: "hasSyncedPremiumAccess"))
+        XCTAssertTrue(defaults.bool(forKey: "cachedPremiumAccess"))
+        XCTAssertEqual(defaults.double(forKey: "premiumRevocationFirstSeenAt"), 9_000)
     }
 
     func testActiveMissingRelaunchExpiryAndRecoveryRunThroughClientPersistence() async throws {

@@ -22,6 +22,7 @@ final class FakeRevenueCatProvider: RevenueCatProviding {
 
     var customerInfoResponses: [Result<ProviderCustomerInfo, ProviderError>] = []
     var logInResponse: Result<ProviderCustomerInfo, ProviderError>?
+    var logInCreated = true
     var logOutResponse: Result<ProviderCustomerInfo, ProviderError>?
     var offeringValue: ProviderOffering?
     var offeringError: ProviderError?
@@ -37,7 +38,7 @@ final class FakeRevenueCatProvider: RevenueCatProviding {
 
     private var streamContinuation: AsyncStream<Void>.Continuation?
     private var purchaseContinuation: CheckedContinuation<ProviderPurchaseResult, any Error>?
-    private var logInContinuation: CheckedContinuation<ProviderCustomerInfo, any Error>?
+    private var logInContinuation: CheckedContinuation<ProviderLogInResult, any Error>?
     private var offeringContinuation: CheckedContinuation<ProviderOfferingResult, any Error>?
     private var customerInfoContinuation: CheckedContinuation<ProviderCustomerInfo, any Error>?
 
@@ -80,7 +81,7 @@ final class FakeRevenueCatProvider: RevenueCatProviding {
         return pair.stream
     }
 
-    func logIn(appUserID: String) async throws -> ProviderCustomerInfo {
+    func logIn(appUserID: String) async throws -> ProviderLogInResult {
         logInCallCount += 1
         if suspendLogIn {
             return try await withCheckedThrowingContinuation { continuation in
@@ -92,11 +93,14 @@ final class FakeRevenueCatProvider: RevenueCatProviding {
             let result = try logInResponse.get()
             self.appUserID = result.fetchedForAppUserID
             isAnonymous = false
-            return result
+            return ProviderLogInResult(customerInfo: result, created: logInCreated)
         }
         self.appUserID = appUserID
         isAnonymous = false
-        return makeCustomerInfo(appUserID: appUserID)
+        return ProviderLogInResult(
+            customerInfo: makeCustomerInfo(appUserID: appUserID),
+            created: logInCreated
+        )
     }
 
     func logOut() async throws -> ProviderCustomerInfo {
@@ -184,6 +188,7 @@ final class FakeRevenueCatProvider: RevenueCatProviding {
     func resumeLogIn(
         appUserID: String,
         isAnonymous: Bool = false,
+        created: Bool = true,
         result: Result<ProviderCustomerInfo, ProviderError>
     ) {
         self.appUserID = appUserID
@@ -191,7 +196,11 @@ final class FakeRevenueCatProvider: RevenueCatProviding {
         let continuation = logInContinuation
         logInContinuation = nil
         suspendLogIn = false
-        continuation?.resume(with: result.mapError { $0 as any Error })
+        continuation?.resume(
+            with: result
+                .map { ProviderLogInResult(customerInfo: $0, created: created) }
+                .mapError { $0 as any Error }
+        )
     }
 
     func resumeOffering(

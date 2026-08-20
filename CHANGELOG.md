@@ -22,7 +22,8 @@ layer for the App portfolio.
 - Preserve the shipped seven-day protection when a previously confirmed
   premium entitlement temporarily disappears. Legacy global keys migrate once
   to the initially restored RevenueCat identity; new state is identity-scoped,
-  and rollback keys remain unchanged.
+  rollback keys remain unchanged, and anonymous provenance moves only when
+  RevenueCat confirms login created a new alias target.
 - Add a complete integration skill and host migration reference.
 
 ### Changed

@@ -461,6 +461,7 @@ private extension RevenueCatClient {
             let customerInfo: ProviderCustomerInfo
             let freshness: SnapshotFreshness
             var anonymousAliasSource: String?
+            var didCreateAliasTarget = false
             if providerIdentityMatches(desiredIdentity) {
                 let capture = try captureIdentity()
                 customerInfo = try await provider.customerInfo(
@@ -479,7 +480,9 @@ private extension RevenueCatClient {
                     if provider.isAnonymous == true {
                         anonymousAliasSource = provider.appUserID
                     }
-                    customerInfo = try await provider.logIn(appUserID: appUserID.rawValue)
+                    let logInResult = try await provider.logIn(appUserID: appUserID.rawValue)
+                    customerInfo = logInResult.customerInfo
+                    didCreateAliasTarget = logInResult.created
                 }
                 freshness = .networkConfirmed
             }
@@ -490,7 +493,8 @@ private extension RevenueCatClient {
                   let rawAppUserID = provider.appUserID else {
                 throw RevenueCatClientError.identityChangedDuringOperation
             }
-            if let anonymousAliasSource,
+            if didCreateAliasTarget,
+               let anonymousAliasSource,
                case .account = desiredIdentity {
                 revocationGrace.transferAnonymousProvenance(
                     from: anonymousAliasSource,

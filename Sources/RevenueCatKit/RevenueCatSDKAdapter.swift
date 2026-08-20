@@ -65,10 +65,16 @@ final class RevenueCatSDKAdapter: RevenueCatProviding {
         }
     }
 
-    func logIn(appUserID: String) async throws -> ProviderCustomerInfo {
+    func logIn(appUserID: String) async throws -> ProviderLogInResult {
         do {
             let result = try await Purchases.shared.logIn(appUserID)
-            return makeCustomerInfo(result.customerInfo, fetchedForAppUserID: Purchases.shared.appUserID)
+            return ProviderLogInResult(
+                customerInfo: makeCustomerInfo(
+                    result.customerInfo,
+                    fetchedForAppUserID: Purchases.shared.appUserID
+                ),
+                created: result.created
+            )
         } catch {
             throw mapError(error)
         }
