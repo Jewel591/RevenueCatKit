@@ -8,6 +8,10 @@ private final class ObservationFlag: @unchecked Sendable {
 
 @MainActor
 final class RevenueCatStateOrchestrationTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        resetStandardRevocationGraceState()
+    }
     func testFreshAccountIdentityRestoresPersistedUserThenLogsIn() async throws {
         let provider = FakeRevenueCatProvider()
         let client = RevenueCatClient(provider: provider)

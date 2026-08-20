@@ -31,6 +31,7 @@ extension AccessLevel {
 public enum BillingCondition: Sendable, Equatable {
     case notApplicable
     case expired
+    case entitlementTemporarilyMissing
     case billingIssueWhileActive
     case cancelledButActive
     case healthy
@@ -105,6 +106,10 @@ public struct EntitlementSnapshot: Sendable, Equatable {
 }
 
 extension EntitlementSnapshot {
+    var confirmsPurchaseEntitlement: Bool {
+        accessLevel.grantsPremiumAccess && billingCondition != .entitlementTemporarilyMissing
+    }
+
     func withFreshness(_ freshness: SnapshotFreshness) -> Self {
         .init(
             accessLevel: accessLevel,
@@ -200,6 +205,7 @@ public struct PurchaseOption: Sendable, Equatable {
     public let localizedPrice: String
     public let currencyCode: String?
     public let subscriptionPeriod: SubscriptionPeriod?
+    public let introductoryOffer: IntroductoryOffer?
     public let productID: String
 
     public init(
@@ -211,6 +217,7 @@ public struct PurchaseOption: Sendable, Equatable {
         localizedPrice: String,
         currencyCode: String?,
         subscriptionPeriod: SubscriptionPeriod?,
+        introductoryOffer: IntroductoryOffer? = nil,
         productID: String
     ) {
         self.id = id
@@ -221,7 +228,34 @@ public struct PurchaseOption: Sendable, Equatable {
         self.localizedPrice = localizedPrice
         self.currencyCode = currencyCode
         self.subscriptionPeriod = subscriptionPeriod
+        self.introductoryOffer = introductoryOffer
         self.productID = productID
+    }
+}
+
+public struct IntroductoryOffer: Sendable, Equatable {
+    public enum PaymentMode: Sendable, Equatable {
+        case payAsYouGo
+        case payUpFront
+        case freeTrial
+        case unknown
+    }
+
+    public let localizedPrice: String
+    public let paymentMode: PaymentMode
+    public let subscriptionPeriod: SubscriptionPeriod
+    public let numberOfPeriods: Int
+
+    public init(
+        localizedPrice: String,
+        paymentMode: PaymentMode,
+        subscriptionPeriod: SubscriptionPeriod,
+        numberOfPeriods: Int
+    ) {
+        self.localizedPrice = localizedPrice
+        self.paymentMode = paymentMode
+        self.subscriptionPeriod = subscriptionPeriod
+        self.numberOfPeriods = numberOfPeriods
     }
 }
 

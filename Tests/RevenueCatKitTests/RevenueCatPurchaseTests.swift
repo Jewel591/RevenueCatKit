@@ -3,6 +3,10 @@ import XCTest
 
 @MainActor
 final class RevenueCatPurchaseTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        resetStandardRevocationGraceState()
+    }
     func testPurchaseUsesEntitlementBeforeCancellationFlag() async throws {
         let (client, provider, optionID) = try await makeClientWithOption()
         provider.purchaseResponse = .success(

@@ -3,6 +3,10 @@ import XCTest
 
 @MainActor
 final class RevenueCatConfigurationTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        resetStandardRevocationGraceState()
+    }
     func testConfigurationRejectsInvalidAppOwnedFactsAndIdentityCombinations() async {
         let cases: [(
             RevenueCatClient.Configuration,

@@ -65,10 +65,16 @@ final class RevenueCatSDKAdapter: RevenueCatProviding {
         }
     }
 
-    func logIn(appUserID: String) async throws -> ProviderCustomerInfo {
+    func logIn(appUserID: String) async throws -> ProviderLogInResult {
         do {
             let result = try await Purchases.shared.logIn(appUserID)
-            return makeCustomerInfo(result.customerInfo, fetchedForAppUserID: Purchases.shared.appUserID)
+            return ProviderLogInResult(
+                customerInfo: makeCustomerInfo(
+                    result.customerInfo,
+                    fetchedForAppUserID: Purchases.shared.appUserID
+                ),
+                created: result.created
+            )
         } catch {
             throw mapError(error)
         }
@@ -111,6 +117,17 @@ final class RevenueCatSDKAdapter: RevenueCatProviding {
                     localizedPrice: package.storeProduct.localizedPriceString,
                     currencyCode: package.storeProduct.currencyCode,
                     subscriptionPeriod: package.storeProduct.subscriptionPeriod?.companyValue,
+                    introductoryOffer: package.storeProduct.introductoryDiscount.flatMap {
+                        guard let subscriptionPeriod = $0.subscriptionPeriod.companyValue else {
+                            return nil
+                        }
+                        return IntroductoryOffer(
+                            localizedPrice: $0.localizedPriceString,
+                            paymentMode: $0.paymentMode.companyValue,
+                            subscriptionPeriod: subscriptionPeriod,
+                            numberOfPeriods: $0.numberOfPeriods
+                        )
+                    },
                     productID: package.storeProduct.productIdentifier
                 )
             }
@@ -254,6 +271,17 @@ final class RevenueCatSDKAdapter: RevenueCatProviding {
             return .operationInProgress
         default:
             return .unknown
+        }
+    }
+}
+
+private extension StoreProductDiscount.PaymentMode {
+    var companyValue: IntroductoryOffer.PaymentMode {
+        switch self {
+        case .payAsYouGo: .payAsYouGo
+        case .payUpFront: .payUpFront
+        case .freeTrial: .freeTrial
+        @unknown default: .unknown
         }
     }
 }

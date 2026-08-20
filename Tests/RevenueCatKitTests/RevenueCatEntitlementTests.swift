@@ -3,6 +3,10 @@ import XCTest
 
 @MainActor
 final class RevenueCatEntitlementTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        resetStandardRevocationGraceState()
+    }
     func testMissingEntitlementIsKnownFree() async throws {
         let provider = FakeRevenueCatProvider()
         let client = try await makeConfiguredClient(provider: provider)

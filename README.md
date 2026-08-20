@@ -12,7 +12,7 @@
 https://github.com/Jewel591/RevenueCatKit.git
 ```
 
-生产项目应依赖已发布的语义化版本。跨仓库联调尚未发布的版本时，可以短期固定到一个完整 commit SHA，避免跟踪可变分支；发布后再切回版本约束。App target 只链接 `RevenueCatKit` product，不再直接链接或 `import RevenueCat`。
+生产项目只依赖已发布的语义化版本，并使用自动兼容版本范围。Kit 的运行时代码必须先发布 tag，消费项目才能升级；不得为了跨仓联调改锁 branch、revision 或 commit SHA。App target 只链接 `RevenueCatKit` product，不再直接链接或 `import RevenueCat`。
 
 ### Xcode Cloud
 
@@ -50,7 +50,7 @@ Apple 正身文档：[Making dependencies available to Xcode Cloud](https://deve
 使用 $integrate-revenuecatkit，把这个 App 迁移到 RevenueCatKit，并完成迁移检查。
 ```
 
-在其他仓库接入时，把 `.agents/skills/integrate-revenuecatkit` 复制到目标仓库同一路径，或将它安装到 agent 的个人 skills 目录，然后使用同一指令。skill 是实施手册，不替代目标 App 自己的工程约定；若目标仓库有 `AGENTS.md`，两者必须同时遵守。
+在其他仓库接入时，从该仓库解析到的 RevenueCatKit semver tag checkout 中直接读取 skill；若本机尚无 checkout，则通过 GitHub API 只读获取本仓库对应 tag 下的 skill。不要把它复制进目标仓库或个人 skills 目录——正身只在 RevenueCatKit 中维护。skill 是实施手册，不替代目标 App 自己的工程约定；若目标仓库有 `AGENTS.md`，两者必须同时遵守。
 
 ## 职责边界
 
@@ -60,7 +60,7 @@ RevenueCatKit 统一负责：
 - 匿名、已登录及混合身份模式与 App User ID 校验
 - `CustomerInfo` 获取、主动刷新和变化监听
 - Entitlement 到统一 `AccessLevel` 的转换
-- 当前 Offering、Placement Offering 和内购资格
+- 当前 Offering、Placement Offering、介绍优惠展示元数据和内购资格
 - 购买、恢复、重复点击保护及错误归一化
 - Sandbox、TestFlight、App Store 等分发环境诊断
 

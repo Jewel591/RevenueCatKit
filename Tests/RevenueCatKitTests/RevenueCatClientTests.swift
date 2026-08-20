@@ -3,6 +3,10 @@ import XCTest
 
 @MainActor
 final class RevenueCatClientTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        resetStandardRevocationGraceState()
+    }
     func testConfigurationKeepsOnlyAppOwnedFacts() {
         let configuration = makeConfiguration()
 

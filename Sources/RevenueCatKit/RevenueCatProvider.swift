@@ -14,7 +14,7 @@ protocol RevenueCatProviding: AnyObject {
     )
     func customerInfo(policy: CustomerInfoFetchPolicy) async throws -> ProviderCustomerInfo
     func customerInfoInvalidationStream() -> AsyncStream<Void>
-    func logIn(appUserID: String) async throws -> ProviderCustomerInfo
+    func logIn(appUserID: String) async throws -> ProviderLogInResult
     func logOut() async throws -> ProviderCustomerInfo
     func offering(for placement: PaywallPlacement?) async throws -> ProviderOfferingResult
     func introEligibility(for handle: ProviderPackageHandle) async throws -> ProviderEligibilityResult
@@ -60,6 +60,11 @@ struct ProviderCustomerInfo: Sendable, Equatable {
     let entitlements: [String: ProviderEntitlement]
 }
 
+struct ProviderLogInResult: Sendable, Equatable {
+    let customerInfo: ProviderCustomerInfo
+    let created: Bool
+}
+
 struct ProviderPackageHandle: Hashable, Sendable {
     let rawValue: UUID
 }
@@ -74,6 +79,7 @@ struct ProviderPackage: Sendable, Equatable {
     let localizedPrice: String
     let currencyCode: String?
     let subscriptionPeriod: SubscriptionPeriod?
+    let introductoryOffer: IntroductoryOffer?
     let productID: String
 }
 
