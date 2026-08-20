@@ -12,7 +12,7 @@
 https://github.com/Jewel591/RevenueCatKit.git
 ```
 
-生产项目应依赖已发布的语义化版本。跨仓库联调尚未发布的版本时，可以短期固定到一个完整 commit SHA，避免跟踪可变分支；发布后再切回版本约束。App target 只链接 `RevenueCatKit` product，不再直接链接或 `import RevenueCat`。
+生产项目只依赖已发布的语义化版本，并使用自动兼容版本范围。Kit 的运行时代码必须先发布 tag，消费项目才能升级；不得为了跨仓联调改锁 branch、revision 或 commit SHA。App target 只链接 `RevenueCatKit` product，不再直接链接或 `import RevenueCat`。
 
 ### Xcode Cloud
 
