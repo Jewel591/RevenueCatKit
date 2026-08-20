@@ -31,6 +31,7 @@ Do not treat “the authentication SDK has not answered yet” as signed out. As
 `setDesiredIdentity(.anonymous)` logs the RevenueCat user out. Do not use it for “user signed out of optional cloud backup.” Do not use it on first launch just because the App persist key and account session are both missing — that is the upgrade path where RevenueCat may still hold an identified paid user. Configure first, then adopt the restored identity. Use `.anonymous` only after the restored user is actually anonymous, or for account deletion / an intentional reset.
 
 ```swift
+import Observation
 import RevenueCatKit
 
 @MainActor
@@ -45,16 +46,31 @@ final class MembershipIdentityCoordinator {
     private let client = RevenueCatClient.shared
     private var configurationTask: Task<Void, Error>?
 
+    private var persistedPurchaseAppUserID: RevenueCatClient.AppUserID? {
+        get {
+            UserDefaults.standard.string(forKey: "purchaseAppUserID")
+                .map(RevenueCatClient.AppUserID.init)
+        }
+        set {
+            UserDefaults.standard.set(newValue?.rawValue, forKey: "purchaseAppUserID")
+        }
+    }
+
     func publish(_ fact: SessionFact) {
         switch fact {
         case .unresolved:
             return
         case .signedOutKeepingPurchases:
-            break
+            if let persistedPurchaseAppUserID {
+                client.setDesiredIdentity(.account(persistedPurchaseAppUserID))
+            }
         case .resetToAnonymous:
+            persistedPurchaseAppUserID = nil
             client.setDesiredIdentity(.anonymous)
         case .signedIn(let accountID):
-            client.setDesiredIdentity(.account(.init(accountID)))
+            let appUserID = RevenueCatClient.AppUserID(accountID)
+            persistedPurchaseAppUserID = appUserID
+            client.setDesiredIdentity(.account(appUserID))
         }
 
         if configurationTask == nil {
@@ -70,38 +86,46 @@ final class MembershipIdentityCoordinator {
         }
         do {
             try await configurationTask.value
+            if client.state.desiredIdentity == nil {
+                let restoredIdentity: RevenueCatClient.DesiredIdentity
+                if client.state.isAnonymous == false,
+                   let restoredID = client.state.currentAppUserID {
+                    persistedPurchaseAppUserID = restoredID
+                    restoredIdentity = .account(restoredID)
+                } else {
+                    restoredIdentity = .anonymous
+                }
+                client.setDesiredIdentity(restoredIdentity)
+            }
+            await waitUntilIdentitySettles()
         } catch {
             self.configurationTask = nil
             throw error
         }
     }
+
+    private func waitUntilIdentitySettles() async {
+        while client.state.identityAlignment == .undeclared
+            || client.state.identityAlignment == .transitioning {
+            await withCheckedContinuation { continuation in
+                withObservationTracking {
+                    _ = client.state.identityAlignment
+                } onChange: {
+                    Task { @MainActor in continuation.resume() }
+                }
+            }
+        }
+    }
 }
 ```
 
-Calling `publish(.signedIn(accountID:))` before awaiting configuration lets the Kit restore any persisted RevenueCat user, then `logIn` to match. Persist `.signedIn` across process launches if the App allows signed-out purchases. Publish later login, deletion, and account switch through the same coordinator. The example intentionally does nothing for `.unresolved`, so a cold launch never manufactures a signed-out RevenueCat identity while the account fact is still loading. `.signedOutKeepingPurchases` leaves the last confirmed identity in place.
+Calling `publish(.signedIn(accountID:))` before awaiting configuration lets the Kit restore any persisted RevenueCat user, then `logIn` to match. Persist the purchase App User ID across process launches if the App allows signed-out purchases. Publish later login, deletion, and account switch through the same coordinator. The example intentionally does nothing for `.unresolved`, so a cold launch never manufactures a signed-out RevenueCat identity while the account fact is still loading. `.signedOutKeepingPurchases` declares the persisted purchase identity before configuration; when that key is absent during an upgrade, `waitUntilConfigured()` configures first, adopts the SDK-restored identity, and waits until alignment is `.matching` or `.failed` before initialization completes.
 
-If the persist key is missing and there is no account session, configure first, then adopt the restored user. Do not map “unresolved + nil session” to `.anonymous`:
+If the persist key is missing and there is no account session, use the same coordinator's configure-then-adopt path. Do not map “unresolved + nil session” to `.anonymous`:
 
 ```swift
-@MainActor
-func publishKnownAccountFact(_ accountID: String?) {
-    guard let accountID, !accountID.isEmpty else { return }
-    RevenueCatClient.shared.setDesiredIdentity(.account(.init(accountID)))
-}
-
-@MainActor
-func adoptRestoredPurchaseIdentityIfNeeded() async throws {
-    let client = RevenueCatClient.shared
-    try await client.configure(AppMonetizationConfiguration.revenueCat)
-
-    if client.state.isAnonymous == false,
-       let restoredID = client.state.currentAppUserID {
-        client.setDesiredIdentity(.account(restoredID))
-        return
-    }
-
-    client.setDesiredIdentity(.anonymous)
-}
+coordinator.publish(.signedOutKeepingPurchases)
+try await coordinator.waitUntilConfigured()
 ```
 
 Never call RevenueCat SDK `logIn` or `logOut` from the App. During alignment, `client.state.identityAlignment` is `.transitioning` and access is `.unknown`. If alignment fails, repeating the same desired identity explicitly retries it — do that on network and foreground recovery, not only when the paywall opens.

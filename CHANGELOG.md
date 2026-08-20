@@ -14,9 +14,14 @@ layer for the App portfolio.
   distribution, and error models without exposing RevenueCat SDK types.
 - Add Current Offering and Placement Offering state with identity- and
   snapshot-scoped purchase handles.
-- Add forced network entitlement refresh and introductory-offer eligibility.
+- Add forced network entitlement refresh, introductory-offer display metadata,
+  and current-account eligibility.
 - Add persisted identity restoration before login alignment so upgrades do not
   discard an existing identified purchase identity.
+- Preserve the shipped seven-day protection when a previously confirmed
+  premium entitlement temporarily disappears. Legacy global keys migrate once
+  to the initially restored RevenueCat identity; new state is identity-scoped,
+  and rollback keys remain unchanged.
 - Add a complete integration skill and host migration reference.
 
 ### Changed

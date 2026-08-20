@@ -68,6 +68,8 @@ public final class RevenueCatClient {
     @ObservationIgnored
     private let runtimeOptions: RevenueCatRuntimeOptions
     @ObservationIgnored
+    private let revocationGrace: PremiumRevocationGrace
+    @ObservationIgnored
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "com.company.RevenueCatKit",
         category: "RevenueCatClient"
@@ -118,11 +120,13 @@ public final class RevenueCatClient {
     init(
         provider: RevenueCatProviding,
         distributionChannelProvider: @escaping @MainActor () -> DistributionChannel = RevenueCatClient.detectDistributionChannel,
-        runtimeOptions: RevenueCatRuntimeOptions = .companyDefault
+        runtimeOptions: RevenueCatRuntimeOptions = .companyDefault,
+        revocationGrace: PremiumRevocationGrace = PremiumRevocationGrace()
     ) {
         self.provider = provider
         self.distributionChannelProvider = distributionChannelProvider
         self.runtimeOptions = runtimeOptions
+        self.revocationGrace = revocationGrace
     }
 
     deinit {
@@ -301,7 +305,7 @@ public final class RevenueCatClient {
                     freshness: .networkConfirmed,
                     capture: capture
                 )
-                if snapshot.accessLevel.grantsPremiumAccess {
+                if snapshot.confirmsPurchaseEntitlement {
                     return .purchased(snapshot)
                 }
                 if result.userCancelled {
@@ -415,6 +419,9 @@ private extension RevenueCatClient {
             proxyURL: runtimeOptions.proxyURL,
             logLevel: runtimeOptions.logLevel
         )
+        if let restoredAppUserID = provider.appUserID {
+            revocationGrace.prepareInitialRestoredIdentity(restoredAppUserID)
+        }
         sdkConfiguredByClient = true
         publishProviderIdentity(
             entitlement: nil,
@@ -525,7 +532,7 @@ private extension RevenueCatClient {
                     policy: .fetchCurrent,
                     capture: capture
                 )
-                guard snapshot.accessLevel.grantsPremiumAccess else {
+                guard snapshot.confirmsPurchaseEntitlement else {
                     throw RevenueCatClientError.invalidPurchase
                 }
                 return .purchased(snapshot)
@@ -538,7 +545,7 @@ private extension RevenueCatClient {
                     policy: .fetchCurrent,
                     capture: capture
                 )
-                guard snapshot.accessLevel.grantsPremiumAccess else {
+                guard snapshot.confirmsPurchaseEntitlement else {
                     throw RevenueCatClientError.purchaseStatusUnknown
                 }
                 return .purchased(snapshot)
@@ -579,17 +586,21 @@ private extension RevenueCatClient {
             throw RevenueCatClientError.notConfigured
         }
 
+        // Revocation grace is persisted state. An out-of-order response must not start or clear
+        // its clock before the newer published snapshot wins the request-date comparison below.
+        if let existing = state.entitlement,
+           customerInfo.requestDate < existing.requestDate {
+            return existing
+        }
+
         let incoming = makeEntitlementSnapshot(
             from: customerInfo,
             entitlementID: configuration.premiumEntitlementID.rawValue,
-            freshness: freshness
+            freshness: freshness,
+            appUserID: capture.appUserID.rawValue
         )
 
         if let existing = state.entitlement {
-            if incoming.requestDate < existing.requestDate {
-                return existing
-            }
-
             if incoming.requestDate == existing.requestDate {
                 let mergedFreshness = incoming.freshness.strength > existing.freshness.strength
                     ? incoming.freshness
@@ -611,9 +622,17 @@ private extension RevenueCatClient {
     func makeEntitlementSnapshot(
         from customerInfo: ProviderCustomerInfo,
         entitlementID: String,
-        freshness: SnapshotFreshness
+        freshness: SnapshotFreshness,
+        appUserID: String
     ) -> EntitlementSnapshot {
         guard let entitlement = customerInfo.entitlements[entitlementID] else {
+            if let protectedSnapshot = revocationGrace.resolveMissingEntitlement(
+                identity: appUserID,
+                requestDate: customerInfo.requestDate,
+                freshness: freshness
+            ) {
+                return protectedSnapshot
+            }
             return .init(
                 accessLevel: .free,
                 billingCondition: .notApplicable,
@@ -630,18 +649,23 @@ private extension RevenueCatClient {
         let accessLevel: AccessLevel
         let billingCondition: BillingCondition
         if !entitlement.isActiveInCurrentEnvironment {
+            revocationGrace.recordConfirmedFree(identity: appUserID)
             accessLevel = .free
             billingCondition = .expired
         } else if entitlement.billingIssueDetectedAt != nil {
+            revocationGrace.recordConfirmedPremium(identity: appUserID)
             accessLevel = .premiumInGracePeriod
             billingCondition = .billingIssueWhileActive
         } else if entitlement.unsubscribeDetectedAt != nil {
+            revocationGrace.recordConfirmedPremium(identity: appUserID)
             accessLevel = .premium
             billingCondition = .cancelledButActive
         } else if entitlement.expirationDate == nil {
+            revocationGrace.recordConfirmedPremium(identity: appUserID)
             accessLevel = .premium
             billingCondition = .notApplicable
         } else {
+            revocationGrace.recordConfirmedPremium(identity: appUserID)
             accessLevel = .premium
             billingCondition = .healthy
         }
@@ -678,6 +702,7 @@ private extension RevenueCatClient {
                 localizedPrice: package.localizedPrice,
                 currencyCode: package.currencyCode,
                 subscriptionPeriod: package.subscriptionPeriod,
+                introductoryOffer: package.introductoryOffer,
                 productID: package.productID
             )
         }

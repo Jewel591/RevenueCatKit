@@ -3,6 +3,10 @@ import XCTest
 
 @MainActor
 final class RevenueCatOfferingAndIdentityTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        resetStandardRevocationGraceState()
+    }
     func testBlankPlacementIsRejectedBeforeProviderCall() async throws {
         let provider = FakeRevenueCatProvider()
         let client = try await makeConfiguredClient(provider: provider)
@@ -36,6 +40,10 @@ final class RevenueCatOfferingAndIdentityTests: XCTestCase {
         XCTAssertEqual(snapshot.offeringID, "dashboard-fallback")
         XCTAssertEqual(snapshot.placement, .init("feature_gate"))
         XCTAssertEqual(snapshot.purchaseOptions.count, 1)
+        XCTAssertEqual(
+            snapshot.purchaseOptions.first?.introductoryOffer,
+            .init(localizedPrice: "$4.99", paymentMode: .payUpFront)
+        )
     }
 
     func testProviderFailureIsNotConflatedWithMissingOffering() async throws {

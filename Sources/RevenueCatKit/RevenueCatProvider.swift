@@ -74,6 +74,7 @@ struct ProviderPackage: Sendable, Equatable {
     let localizedPrice: String
     let currencyCode: String?
     let subscriptionPeriod: SubscriptionPeriod?
+    let introductoryOffer: IntroductoryOffer?
     let productID: String
 }
 

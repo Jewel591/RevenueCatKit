@@ -2,6 +2,13 @@ import Foundation
 import XCTest
 @testable import RevenueCatKit
 
+func resetStandardRevocationGraceState() {
+    for key in UserDefaults.standard.dictionaryRepresentation().keys
+    where key.hasPrefix("RevenueCatKit.revocationGrace.v2.") {
+        UserDefaults.standard.removeObject(forKey: key)
+    }
+}
+
 @MainActor
 func seedPersistedAccount(
     _ provider: FakeRevenueCatProvider,
