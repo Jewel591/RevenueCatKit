@@ -59,6 +59,19 @@ struct ProviderCustomerInfo: Sendable, Equatable {
     let fetchedForAppUserID: String
     let requestDate: Date
     let entitlements: [String: ProviderEntitlement]
+    let allPurchasedProductIDs: Set<String>
+
+    init(
+        fetchedForAppUserID: String,
+        requestDate: Date,
+        entitlements: [String: ProviderEntitlement],
+        allPurchasedProductIDs: Set<String> = []
+    ) {
+        self.fetchedForAppUserID = fetchedForAppUserID
+        self.requestDate = requestDate
+        self.entitlements = entitlements
+        self.allPurchasedProductIDs = allPurchasedProductIDs
+    }
 }
 
 struct ProviderLogInResult: Sendable, Equatable {

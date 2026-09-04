@@ -231,12 +231,14 @@ func makeCustomerInfo(
     appUserID: String,
     requestDate: Date = Date(timeIntervalSince1970: 1_000),
     entitlementID: String = "premium",
-    entitlement: ProviderEntitlement? = nil
+    entitlement: ProviderEntitlement? = nil,
+    allPurchasedProductIDs: Set<String> = []
 ) -> ProviderCustomerInfo {
     .init(
         fetchedForAppUserID: appUserID,
         requestDate: requestDate,
-        entitlements: entitlement.map { [entitlementID: $0] } ?? [:]
+        entitlements: entitlement.map { [entitlementID: $0] } ?? [:],
+        allPurchasedProductIDs: allPurchasedProductIDs
     )
 }
 

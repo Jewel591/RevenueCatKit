@@ -71,6 +71,125 @@ public enum DistributionChannel: Sendable, Equatable {
     case unknown
 }
 
+/// House-standard classification for “the user paid, but the expected entitlement is not active.”
+///
+/// Each case maps to a different operational action. The collections on
+/// `EntitlementDiagnostics` are lifetime customer history from RevenueCat, not proof that
+/// the current StoreKit transaction has posted.
+public enum EntitlementFailureDiagnosis: String, Sendable, Equatable {
+    /// Expected entitlement key is absent and there is no in-flight purchase to attribute.
+    /// Meaningful on the revocation path, where the user was previously confirmed premium.
+    case entitlementIDMissing = "entitlement_id_missing"
+
+    /// RevenueCat already lists this product ID on the customer, but the expected entitlement
+    /// is not active. The usual action is to fix the Dashboard product-to-entitlement mapping.
+    case productNotAttachedToEntitlement = "product_not_attached_to_entitlement"
+
+    /// RevenueCat has no lifetime record of this product ID for the customer. Treat as sync
+    /// delay: retry restore, do not change Dashboard mapping.
+    case transactionNotYetSynced = "transaction_not_yet_synced"
+
+    /// The expected entitlement key exists but is inactive, and there is no in-flight purchase.
+    /// Expiry, refund, and server-side revocation all land here.
+    case entitlementInactiveUnknownCause = "entitlement_inactive_unknown_cause"
+
+    /// The expected entitlement is active. Reaching a failure reporter with this result means
+    /// the call site’s “is entitled” check has drifted from this classifier.
+    case entitlementActive = "entitlement_active"
+
+    /// Classifies why the expected entitlement is inactive.
+    ///
+    /// When `purchasedProductID` is present, product membership is the watershed and is
+    /// evaluated before entitlement-key existence. `entitlements.all` is the set this customer
+    /// has been granted, not the project-wide entitlement table, so a first purchase that has
+    /// not granted access leaves that set empty.
+    public static func classify(
+        expectedEntitlementID: String,
+        allEntitlementIDs: Set<String>,
+        activeEntitlementIDs: Set<String>,
+        allPurchasedProductIDs: Set<String>,
+        purchasedProductID: String?
+    ) -> Self {
+        if activeEntitlementIDs.contains(expectedEntitlementID) {
+            return .entitlementActive
+        }
+
+        if let purchasedProductID {
+            return allPurchasedProductIDs.contains(purchasedProductID)
+                ? .productNotAttachedToEntitlement
+                : .transactionNotYetSynced
+        }
+
+        guard allEntitlementIDs.contains(expectedEntitlementID) else {
+            return .entitlementIDMissing
+        }
+
+        return .entitlementInactiveUnknownCause
+    }
+}
+
+/// Normalized entitlement collections for diagnostics. Product IDs here are telemetry, not
+/// business configuration or access decisions.
+public struct EntitlementDiagnostics: Sendable, Equatable {
+    public let expectedEntitlementID: String
+    public let allEntitlementIDs: Set<String>
+    public let activeEntitlementIDs: Set<String>
+    /// Product IDs RevenueCat has recorded for this customer. This is lifetime history, not
+    /// proof that the current transaction has synced.
+    public let allPurchasedProductIDs: Set<String>
+    /// Product ID of the in-flight purchase that produced this snapshot, if any.
+    public let purchasedProductID: String?
+
+    public static let empty = EntitlementDiagnostics(
+        expectedEntitlementID: "",
+        allEntitlementIDs: [],
+        activeEntitlementIDs: [],
+        allPurchasedProductIDs: [],
+        purchasedProductID: nil
+    )
+
+    public init(
+        expectedEntitlementID: String,
+        allEntitlementIDs: Set<String>,
+        activeEntitlementIDs: Set<String>,
+        allPurchasedProductIDs: Set<String>,
+        purchasedProductID: String? = nil
+    ) {
+        self.expectedEntitlementID = expectedEntitlementID
+        self.allEntitlementIDs = allEntitlementIDs
+        self.activeEntitlementIDs = activeEntitlementIDs
+        self.allPurchasedProductIDs = allPurchasedProductIDs
+        self.purchasedProductID = purchasedProductID
+    }
+
+    public var diagnosis: EntitlementFailureDiagnosis {
+        diagnose(purchasedProductID: purchasedProductID)
+    }
+
+    public func diagnose(purchasedProductID: String?) -> EntitlementFailureDiagnosis {
+        .classify(
+            expectedEntitlementID: expectedEntitlementID,
+            allEntitlementIDs: allEntitlementIDs,
+            activeEntitlementIDs: activeEntitlementIDs,
+            allPurchasedProductIDs: allPurchasedProductIDs,
+            purchasedProductID: purchasedProductID
+        )
+    }
+
+    /// Sorted, stable key-value pairs for telemetry. Verdicts may be revised later; the
+    /// collections that produced them must remain readable.
+    public var telemetryContext: [String: String] {
+        [
+            "verdict": diagnosis.rawValue,
+            "expected_entitlement_id": expectedEntitlementID,
+            "all_entitlement_ids": allEntitlementIDs.sorted().joined(separator: ","),
+            "active_entitlement_ids": activeEntitlementIDs.sorted().joined(separator: ","),
+            "all_purchased_product_ids": allPurchasedProductIDs.sorted().joined(separator: ","),
+            "purchased_product_id": purchasedProductID ?? "<none>",
+        ]
+    }
+}
+
 public struct EntitlementSnapshot: Sendable, Equatable {
     public let accessLevel: AccessLevel
     public let billingCondition: BillingCondition
@@ -81,6 +200,7 @@ public struct EntitlementSnapshot: Sendable, Equatable {
     public let isSandbox: Bool
     public let requestDate: Date
     public let freshness: SnapshotFreshness
+    public let diagnostics: EntitlementDiagnostics
 
     public init(
         accessLevel: AccessLevel,
@@ -91,7 +211,8 @@ public struct EntitlementSnapshot: Sendable, Equatable {
         store: Store,
         isSandbox: Bool,
         requestDate: Date,
-        freshness: SnapshotFreshness
+        freshness: SnapshotFreshness,
+        diagnostics: EntitlementDiagnostics = .empty
     ) {
         self.accessLevel = accessLevel
         self.billingCondition = billingCondition
@@ -102,6 +223,7 @@ public struct EntitlementSnapshot: Sendable, Equatable {
         self.isSandbox = isSandbox
         self.requestDate = requestDate
         self.freshness = freshness
+        self.diagnostics = diagnostics
     }
 }
 
@@ -111,6 +233,13 @@ extension EntitlementSnapshot {
     }
 
     func withFreshness(_ freshness: SnapshotFreshness) -> Self {
+        withDiagnostics(diagnostics, freshness: freshness)
+    }
+
+    func withDiagnostics(
+        _ diagnostics: EntitlementDiagnostics,
+        freshness: SnapshotFreshness? = nil
+    ) -> Self {
         .init(
             accessLevel: accessLevel,
             billingCondition: billingCondition,
@@ -120,7 +249,8 @@ extension EntitlementSnapshot {
             store: store,
             isSandbox: isSandbox,
             requestDate: requestDate,
-            freshness: freshness
+            freshness: freshness ?? self.freshness,
+            diagnostics: diagnostics
         )
     }
 

@@ -13,6 +13,9 @@ in `.agents/skills/integrate-revenuecatkit/`.
   facts, real Placement IDs, paywall UI/copy, and presentation policy.
 - Never expose RevenueCat SDK types through public API. Product IDs and
   Offering IDs are diagnostics, not business logic or configuration.
+  `EntitlementDiagnostics` and `EntitlementFailureDiagnosis` are the house
+  standard for that diagnostic surface; hosts must not reimplement the
+  mapping-gap vs sync-delay classifier.
 - Preserve `.unknown` separately from `.free`; grace-period access remains
   premium.
 - Do not add RevenueCat Paywalls UI or host-specific product policy.
