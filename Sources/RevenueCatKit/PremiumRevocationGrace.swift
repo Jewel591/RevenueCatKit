@@ -91,8 +91,9 @@ final class PremiumRevocationGrace {
         // which reads as a lifetime purchase to every consumer. Rather than assert that about a
         // subscriber, stay silent until the next confirmation records the real value.
         guard let confirmedExpiration = confirmedExpiration(identity: identity) else { return nil }
-        if let expirationDate = confirmedExpiration,
-           expirationDate <= now() {
+        if storedFirstSeenAt == 0,
+           let expirationDate = confirmedExpiration,
+           now().timeIntervalSince(expirationDate) >= Self.period {
             return nil
         }
 
@@ -163,6 +164,18 @@ final class PremiumRevocationGrace {
     func recordConfirmedPremium(identity: String, expirationDate: Date?) {
         defaults.set(true, forKey: Key.hasConfirmedPremium(identity))
         defaults.set(0, forKey: Key.firstSeenAt(identity))
+        defaults.set(
+            expirationDate?.timeIntervalSince1970 ?? Self.lifetimeExpiration,
+            forKey: Key.confirmedExpiresAt(identity)
+        )
+    }
+
+    /// Backfills the expiration omitted by RevenueCatKit 2.0's provenance record from the
+    /// RevenueCat SDK's own identity-scoped CustomerInfo cache. It deliberately leaves an
+    /// existing revocation clock untouched.
+    func backfillConfirmedExpiration(identity: String, expirationDate: Date?) {
+        guard defaults.bool(forKey: Key.hasConfirmedPremium(identity)),
+              defaults.object(forKey: Key.confirmedExpiresAt(identity)) == nil else { return }
         defaults.set(
             expirationDate?.timeIntervalSince1970 ?? Self.lifetimeExpiration,
             forKey: Key.confirmedExpiresAt(identity)

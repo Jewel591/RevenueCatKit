@@ -267,9 +267,9 @@ final class RevenueCatGraceIntegrationTests: XCTestCase {
         XCTAssertEqual(client.state.accessLevel, .premium)
     }
 
-    /// #11 boundary: a confirmed expiration that has already elapsed proves nothing about the
-    /// current period, so the launch window stays `unknown` rather than claiming premium.
-    func testLapsedConfirmedExpirationIsNotSeededOnRelaunch() async throws {
+    /// #11: a customer who launches shortly after the last confirmed period elapsed stays
+    /// protected by the same seven-day grace while RevenueCat confirms the renewal.
+    func testRecentlyLapsedConfirmedExpirationIsSeededWithinGraceOnRelaunch() async throws {
         guard let context = makeContext() else { return XCTFail("Missing isolated defaults") }
         defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
 
@@ -297,7 +297,8 @@ final class RevenueCatGraceIntegrationTests: XCTestCase {
             !relaunchedProvider.customerInfoPolicies.isEmpty
         }
         XCTAssertTrue(didReachProvider)
-        XCTAssertEqual(relaunched.state.accessLevel, .unknown)
+        XCTAssertEqual(relaunched.state.accessLevel, .premiumInGracePeriod)
+        XCTAssertEqual(relaunched.state.entitlement?.expirationDate, lapsed)
 
         relaunchedProvider.resumeCustomerInfo(
             with: .success(activeInfo(requestDate: 2_000, expirationDate: lapsed))
@@ -305,10 +306,74 @@ final class RevenueCatGraceIntegrationTests: XCTestCase {
         try await configureTask.value
     }
 
-    /// #11 boundary: a migrated legacy record carries no confirmed expiration. Seeding it would
-    /// have to guess, so the launch window keeps the pre-fix behaviour until the next
-    /// confirmation records the real value.
-    func testMigratedLegacyRecordWithoutConfirmedExpirationIsNotSeeded() async throws {
+    /// #11 boundary: the launch seed expires at the end of the existing seven-day grace even
+    /// when no network response has arrived to start the missing-entitlement clock.
+    func testConfirmedExpirationBeyondGraceIsNotSeededOnRelaunch() async throws {
+        guard let context = makeContext() else { return XCTFail("Missing isolated defaults") }
+        defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
+
+        let expired = Date(timeIntervalSince1970: context.clock.value - PremiumRevocationGrace.period)
+        let provider = identifiedProvider()
+        provider.customerInfoResponses = [
+            .success(activeInfo(requestDate: 1_000, expirationDate: expired)),
+        ]
+        let client = makeClient(provider: provider, defaults: context.defaults, clock: context.clock)
+        client.setDesiredIdentity(.account("user-a"))
+        try await client.configure(makeConfiguration())
+
+        let relaunchedProvider = identifiedProvider()
+        relaunchedProvider.suspendCustomerInfo = true
+        let relaunched = makeClient(
+            provider: relaunchedProvider,
+            defaults: context.defaults,
+            clock: context.clock
+        )
+        relaunched.setDesiredIdentity(.account("user-a"))
+        let configureTask = Task { try await relaunched.configure(makeConfiguration()) }
+
+        let didReachProvider = await waitUntil {
+            !relaunchedProvider.customerInfoPolicies.isEmpty
+        }
+        XCTAssertTrue(didReachProvider)
+        XCTAssertEqual(relaunched.state.accessLevel, .unknown)
+
+        relaunchedProvider.resumeCustomerInfo(
+            with: .success(activeInfo(requestDate: 2_000, expirationDate: expired))
+        )
+        try await configureTask.value
+    }
+
+    /// #11: RevenueCatKit 2.0 did not persist the confirmed expiration. Backfill it from
+    /// RevenueCat's own identity-scoped cache so the first launch after upgrading is protected.
+    func testMigratedLegacyRecordBackfillsExpirationFromProviderCache() async throws {
+        guard let context = makeContext() else { return XCTFail("Missing isolated defaults") }
+        defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
+        context.defaults.set(true, forKey: "hasSyncedPremiumAccess")
+        context.defaults.set(true, forKey: "cachedPremiumAccess")
+
+        let renewal = Date(timeIntervalSince1970: context.clock.value + 86_400)
+        let provider = identifiedProvider()
+        provider.cachedCustomerInfo = activeInfo(requestDate: 900, expirationDate: renewal)
+        provider.suspendCustomerInfo = true
+        let client = makeClient(provider: provider, defaults: context.defaults, clock: context.clock)
+        client.setDesiredIdentity(.account("user-a"))
+        let configureTask = Task { try await client.configure(makeConfiguration()) }
+
+        let didReachProvider = await waitUntil { !provider.customerInfoPolicies.isEmpty }
+        XCTAssertTrue(didReachProvider)
+        XCTAssertEqual(client.state.accessLevel, .premiumInGracePeriod)
+        XCTAssertEqual(client.state.entitlement?.expirationDate, renewal)
+
+        provider.resumeCustomerInfo(
+            with: .success(activeInfo(requestDate: 1_000, expirationDate: renewal))
+        )
+        try await configureTask.value
+        XCTAssertEqual(client.state.accessLevel, .premium)
+    }
+
+    /// #11 boundary: a migrated provenance flag without RevenueCat's cached entitlement carries
+    /// no expiration evidence, so the Kit stays `unknown` until the network confirms it.
+    func testMigratedLegacyRecordWithoutProviderCacheStaysUnknown() async throws {
         guard let context = makeContext() else { return XCTFail("Missing isolated defaults") }
         defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
         context.defaults.set(true, forKey: "hasSyncedPremiumAccess")
@@ -324,12 +389,45 @@ final class RevenueCatGraceIntegrationTests: XCTestCase {
         XCTAssertTrue(didReachProvider)
         XCTAssertEqual(client.state.accessLevel, .unknown)
 
-        let renewal = Date(timeIntervalSince1970: context.clock.value + 86_400)
-        provider.resumeCustomerInfo(
-            with: .success(activeInfo(requestDate: 1_000, expirationDate: renewal))
-        )
+        provider.resumeCustomerInfo(with: .success(activeInfo(requestDate: 1_000)))
         try await configureTask.value
         XCTAssertEqual(client.state.accessLevel, .premium)
+    }
+
+    /// #11: a refresh failure for an already aligned identity must not discard the locally
+    /// confirmed launch seed; offline customers retain access and can retry later.
+    func testAlignedRelaunchRetainsConfirmedPremiumWhenFirstFetchFails() async throws {
+        guard let context = makeContext() else { return XCTFail("Missing isolated defaults") }
+        defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
+
+        let renewal = Date(timeIntervalSince1970: context.clock.value + 86_400)
+        let provider = identifiedProvider()
+        provider.customerInfoResponses = [
+            .success(activeInfo(requestDate: 1_000, expirationDate: renewal)),
+        ]
+        let client = makeClient(provider: provider, defaults: context.defaults, clock: context.clock)
+        client.setDesiredIdentity(.account("user-a"))
+        try await client.configure(makeConfiguration())
+
+        let relaunchedProvider = identifiedProvider()
+        relaunchedProvider.customerInfoResponses = [.failure(.network)]
+        let relaunched = makeClient(
+            provider: relaunchedProvider,
+            defaults: context.defaults,
+            clock: context.clock
+        )
+        relaunched.setDesiredIdentity(.account("user-a"))
+
+        do {
+            try await relaunched.configure(makeConfiguration())
+            XCTFail("Expected the network refresh to fail")
+        } catch {
+            XCTAssertEqual(error as? RevenueCatClientError, .networkUnavailable)
+        }
+
+        XCTAssertEqual(relaunched.state.identityAlignment, .matching)
+        XCTAssertEqual(relaunched.state.accessLevel, .premiumInGracePeriod)
+        XCTAssertEqual(relaunched.state.entitlement?.expirationDate, renewal)
     }
 
     /// #11 boundary: the seed is identity scoped. Switching to another account must still

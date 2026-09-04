@@ -6,6 +6,7 @@ final class FakeRevenueCatProvider: RevenueCatProviding {
     var isConfigured = false
     var appUserID: String?
     var isAnonymous: Bool?
+    var cachedCustomerInfo: ProviderCustomerInfo?
 
     private(set) var configureCallCount = 0
     private(set) var configuredAppUserID: String?

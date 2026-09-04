@@ -421,6 +421,10 @@ private extension RevenueCatClient {
         )
         if let restoredAppUserID = provider.appUserID {
             revocationGrace.prepareInitialRestoredIdentity(restoredAppUserID)
+            backfillConfirmedExpirationFromProviderCache(
+                identity: restoredAppUserID,
+                entitlementID: validatedConfiguration.premiumEntitlementID.rawValue
+            )
         }
         sdkConfiguredByClient = true
         publishProviderIdentity(
@@ -532,10 +536,19 @@ private extension RevenueCatClient {
             let normalized = normalizedClientError(error)
             if identityGeneration == generation,
                state.desiredIdentity == desiredIdentity {
-                publishProviderIdentity(
-                    entitlement: nil,
-                    identityAlignment: .failed(normalized)
-                )
+                if identityAlreadyAligned {
+                    // The provider identity is still the requested identity. Only its refresh
+                    // failed, so retain locally confirmed access for a later retry.
+                    publishProviderIdentity(
+                        entitlement: state.entitlement,
+                        identityAlignment: .matching
+                    )
+                } else {
+                    publishProviderIdentity(
+                        entitlement: nil,
+                        identityAlignment: .failed(normalized)
+                    )
+                }
             }
             throw normalized
         }
@@ -594,6 +607,20 @@ private extension RevenueCatClient {
             identity: appUserID,
             requestDate: .distantPast,
             freshness: .cachePermitted
+        )
+    }
+
+    func backfillConfirmedExpirationFromProviderCache(
+        identity: String,
+        entitlementID: String
+    ) {
+        guard let cachedCustomerInfo = provider.cachedCustomerInfo,
+              cachedCustomerInfo.fetchedForAppUserID == identity,
+              let entitlement = cachedCustomerInfo.entitlements[entitlementID],
+              entitlement.isActiveInCurrentEnvironment else { return }
+        revocationGrace.backfillConfirmedExpiration(
+            identity: identity,
+            expirationDate: entitlement.expirationDate
         )
     }
 

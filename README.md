@@ -119,7 +119,7 @@ if client.state.isAnonymous == false,
 
 换号期间 `state.identityAlignment` 为 `.transitioning`，`state.accessLevel` 固定为 `.unknown`；失败会落到 `.failed(error)`，重复声明同一身份可显式重试。
 
-本机已持有目标身份时（冷启动恢复、对齐重试）不做这次降级：`identityAlignment` 保持 `.matching`，首次 CustomerInfo 返回前用本机已确认过的高级权益填充 `state.entitlement`（`.premiumInGracePeriod` + `entitlementTemporarilyMissing`，`freshness` 为 `.cachePermitted`，并带上上次确认时记录的到期日），真实响应一到就替换。上次确认的到期日已过、或那条记录来自 2.0 之前的旧缓存（没有到期日可用）时不填充——把订阅用户显示成「无到期日」等于对外宣称终身解锁。付费用户因此不会在每次启动的网络往返里被展示成免费用户；没有本机确认记录的身份仍然是 `.unknown`。
+本机已持有目标身份时（冷启动恢复、对齐重试）不做这次降级：`identityAlignment` 保持 `.matching`，首次 CustomerInfo 返回前用本机已确认过的高级权益填充 `state.entitlement`（`.premiumInGracePeriod` + `entitlementTemporarilyMissing`，`freshness` 为 `.cachePermitted`，并带上上次确认时记录的到期日），真实响应一到就替换。RevenueCatKit 2.0 没记录到期日的存量 provenance 会从 RevenueCat 自己按身份隔离的 CustomerInfo 缓存补齐；上次到期日在七天内的订阅仍沿用既有撤权保护，以覆盖正常自动续费确认窗口。网络暂时不可达时保留这份本机权益和 `.matching`，由宿主现有网络 / 前台恢复路径重试。没有本机确认记录、没有可核实的 RevenueCat 缓存，或到期已超过保护期时仍然是 `.unknown`。
 
 身份策略：
 
