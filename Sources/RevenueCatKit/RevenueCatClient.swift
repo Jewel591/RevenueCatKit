@@ -451,18 +451,31 @@ private extension RevenueCatClient {
         }
 
         let generation = identityGeneration
-        publish(
-            entitlement: .replace(nil),
-            identityAlignment: .transitioning,
-            offerings: clearedOfferingStates()
-        )
+        let identityAlreadyAligned = providerIdentityMatches(desiredIdentity)
+        if identityAlreadyAligned {
+            // The provider already holds the desired identity, so only the entitlement is
+            // pending. Tearing the state down to `unknown` here made every launch show a
+            // previously confirmed premium customer the free presentation until the first
+            // customer-info round trip returned. Keep whatever is known and otherwise fall back
+            // to this device's confirmed premium provenance.
+            publish(
+                entitlement: .replace(state.entitlement ?? confirmedPremiumProvenance()),
+                identityAlignment: .matching
+            )
+        } else {
+            publish(
+                entitlement: .replace(nil),
+                identityAlignment: .transitioning,
+                offerings: clearedOfferingStates()
+            )
+        }
 
         do {
             let customerInfo: ProviderCustomerInfo
             let freshness: SnapshotFreshness
             var anonymousAliasSource: String?
             var didCreateAliasTarget = false
-            if providerIdentityMatches(desiredIdentity) {
+            if identityAlreadyAligned {
                 let capture = try captureIdentity()
                 customerInfo = try await provider.customerInfo(
                     policy: .notStaleCachedOrFetched
@@ -570,6 +583,18 @@ private extension RevenueCatClient {
         default:
             throw normalizedError(providerError)
         }
+    }
+
+    /// Premium confirmed on this device for the provider's current identity, expressed as a
+    /// cache-permitted snapshot. `distantPast` keeps any fetched customer info newer, so the
+    /// first real response always replaces it.
+    func confirmedPremiumProvenance() -> EntitlementSnapshot? {
+        guard let appUserID = provider.appUserID else { return nil }
+        return revocationGrace.confirmedPremiumProvenance(
+            identity: appUserID,
+            requestDate: .distantPast,
+            freshness: .cachePermitted
+        )
     }
 
     func fetchAndApplyCustomerInfo(

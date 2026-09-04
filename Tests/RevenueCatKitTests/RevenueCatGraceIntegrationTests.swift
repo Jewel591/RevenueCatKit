@@ -199,6 +199,100 @@ final class RevenueCatGraceIntegrationTests: XCTestCase {
         }
     }
 
+    /// #11: a relaunch must not report a customer whose premium this device already
+    /// confirmed as `unknown` while the first customer-info fetch is still in flight — that is
+    /// what showed paying customers the free presentation for the first seconds of every launch.
+    func testRelaunchRendersConfirmedPremiumWhileFirstFetchIsStillInFlight() async throws {
+        guard let context = makeContext() else { return XCTFail("Missing isolated defaults") }
+        defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
+
+        let provider = identifiedProvider()
+        provider.customerInfoResponses = [.success(activeInfo(requestDate: 1_000))]
+        let client = makeClient(provider: provider, defaults: context.defaults, clock: context.clock)
+        client.setDesiredIdentity(.account("user-a"))
+        try await client.configure(makeConfiguration())
+        XCTAssertEqual(client.state.accessLevel, .premium)
+
+        let relaunchedProvider = identifiedProvider()
+        relaunchedProvider.suspendCustomerInfo = true
+        let relaunched = makeClient(
+            provider: relaunchedProvider,
+            defaults: context.defaults,
+            clock: context.clock
+        )
+        relaunched.setDesiredIdentity(.account("user-a"))
+        let configureTask = Task { try await relaunched.configure(makeConfiguration()) }
+
+        let didSeedPremium = await waitUntil {
+            relaunched.state.accessLevel.premiumAccess == true
+        }
+        XCTAssertTrue(didSeedPremium)
+        XCTAssertEqual(relaunched.state.identityAlignment, .matching)
+        XCTAssertEqual(relaunched.state.entitlement?.freshness, .cachePermitted)
+
+        relaunchedProvider.resumeCustomerInfo(with: .success(activeInfo(requestDate: 2_000)))
+        try await configureTask.value
+        XCTAssertEqual(relaunched.state.accessLevel, .premium)
+        XCTAssertEqual(relaunched.state.entitlement?.requestDate, Date(timeIntervalSince1970: 2_000))
+    }
+
+    /// #11 counterpart: without confirmed premium provenance the in-flight window stays
+    /// `unknown`. A launch must never invent premium the device has not seen.
+    func testFirstFetchStaysUnknownWithoutConfirmedPremiumProvenance() async throws {
+        guard let context = makeContext() else { return XCTFail("Missing isolated defaults") }
+        defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
+
+        let provider = identifiedProvider()
+        provider.suspendCustomerInfo = true
+        let client = makeClient(provider: provider, defaults: context.defaults, clock: context.clock)
+        client.setDesiredIdentity(.account("user-a"))
+        let configureTask = Task { try await client.configure(makeConfiguration()) }
+
+        let didReachProvider = await waitUntil {
+            !provider.customerInfoPolicies.isEmpty
+        }
+        XCTAssertTrue(didReachProvider)
+        XCTAssertEqual(client.state.accessLevel, .unknown)
+
+        provider.resumeCustomerInfo(with: .success(activeInfo(requestDate: 1_000)))
+        try await configureTask.value
+        XCTAssertEqual(client.state.accessLevel, .premium)
+    }
+
+    /// #11 boundary: the seed is identity scoped. Switching to another account must still
+    /// tear the entitlement down instead of carrying the previous customer's provenance.
+    func testAccountSwitchStillPublishesUnknownDespiteConfirmedPremiumProvenance() async throws {
+        guard let context = makeContext() else { return XCTFail("Missing isolated defaults") }
+        defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
+
+        let provider = identifiedProvider()
+        provider.customerInfoResponses = [.success(activeInfo(requestDate: 1_000))]
+        let client = makeClient(provider: provider, defaults: context.defaults, clock: context.clock)
+        client.setDesiredIdentity(.account("user-a"))
+        try await client.configure(makeConfiguration())
+        XCTAssertEqual(client.state.accessLevel, .premium)
+
+        provider.suspendLogIn = true
+        client.setDesiredIdentity(.account("user-b"))
+        let didStartLogIn = await waitUntil { provider.logInCallCount == 1 }
+        XCTAssertTrue(didStartLogIn)
+        XCTAssertEqual(client.state.accessLevel, .unknown)
+
+        provider.resumeLogIn(
+            appUserID: "user-b",
+            result: .success(makeCustomerInfo(
+                appUserID: "user-b",
+                requestDate: Date(timeIntervalSince1970: 2_000)
+            ))
+        )
+        let didAlign = await waitUntil {
+            client.state.identityAlignment == .matching
+                && client.state.currentAppUserID == .init("user-b")
+        }
+        XCTAssertTrue(didAlign)
+        XCTAssertEqual(client.state.accessLevel, .free)
+    }
+
     private func makeClient(
         provider: FakeRevenueCatProvider,
         defaults: UserDefaults,

@@ -59,6 +59,27 @@ final class PremiumRevocationGrace {
         }
     }
 
+    /// Locally confirmed premium provenance, read without starting or advancing the revocation
+    /// clock. Used to render a customer whose premium was already confirmed on this device while
+    /// the first entitlement fetch of a launch is still in flight, instead of publishing
+    /// `unknown` and showing a paying customer the free presentation for the whole round trip.
+    func confirmedPremiumProvenance(
+        identity: String,
+        requestDate: Date,
+        freshness: SnapshotFreshness
+    ) -> EntitlementSnapshot? {
+        guard defaults.bool(forKey: Key.hasConfirmedPremium(identity)) else { return nil }
+
+        let storedFirstSeenAt = defaults.double(forKey: Key.firstSeenAt(identity))
+        guard storedFirstSeenAt == 0
+            || now().timeIntervalSince1970 - storedFirstSeenAt < Self.period
+        else {
+            return nil
+        }
+
+        return protectedSnapshot(requestDate: requestDate, freshness: freshness)
+    }
+
     func resolveMissingEntitlement(
         identity: String,
         requestDate: Date,
@@ -81,7 +102,14 @@ final class PremiumRevocationGrace {
             return nil
         }
 
-        return .init(
+        return protectedSnapshot(requestDate: requestDate, freshness: freshness)
+    }
+
+    private func protectedSnapshot(
+        requestDate: Date,
+        freshness: SnapshotFreshness
+    ) -> EntitlementSnapshot {
+        .init(
             accessLevel: .premiumInGracePeriod,
             billingCondition: .entitlementTemporarilyMissing,
             productID: nil,
