@@ -5,6 +5,7 @@ protocol RevenueCatProviding: AnyObject {
     var isConfigured: Bool { get }
     var appUserID: String? { get }
     var isAnonymous: Bool? { get }
+    var cachedCustomerInfo: ProviderCustomerInfo? { get }
 
     func configure(
         apiKey: String,

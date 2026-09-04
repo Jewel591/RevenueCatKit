@@ -128,7 +128,7 @@ coordinator.publish(.signedOutKeepingPurchases)
 try await coordinator.waitUntilConfigured()
 ```
 
-Never call RevenueCat SDK `logIn` or `logOut` from the App. During alignment, `client.state.identityAlignment` is `.transitioning` and access is `.unknown`. If alignment fails, repeating the same desired identity explicitly retries it — do that on network and foreground recovery, not only when the paywall opens.
+Never call RevenueCat SDK `logIn` or `logOut` from the App. A real identity change publishes `.transitioning` with `.unknown` access. When the provider already holds the desired identity, RevenueCatKit keeps the identity `.matching` and owns the cache-permitted premium seed while the first refresh is in flight; the App must not duplicate that persistence. If the refresh or identity alignment fails, the state becomes `.failed`; repeating the same desired identity explicitly retries it — do that on network and foreground recovery, not only when the paywall opens.
 
 ## 3. Inject the observable client into SwiftUI
 

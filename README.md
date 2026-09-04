@@ -117,7 +117,9 @@ if client.state.isAnonymous == false,
 
 没有账号会话、也还没有 App 自己的 persist key 时，不要先声明匿名。先 `configure` 让 Kit 恢复本机 RevenueCat 用户：若 `state.isAnonymous == false` 且已有 `currentAppUserID`，把该 ID 认领并落盘；只有恢复结果确认是匿名，才声明 `.anonymous`。否则会把「升级前已退出登录、但 RevenueCat 仍是 identified 付费用户」`logOut()` 掉。删号或明确重置购买身份时才主动声明匿名。
 
-切换期间 `state.identityAlignment` 为 `.transitioning`，`state.accessLevel` 固定为 `.unknown`；失败会落到 `.failed(error)`，重复声明同一身份可显式重试。
+换号期间 `state.identityAlignment` 为 `.transitioning`，`state.accessLevel` 固定为 `.unknown`；失败会落到 `.failed(error)`，重复声明同一身份可显式重试。
+
+本机已持有目标身份时（冷启动恢复、对齐重试）不做这次降级：`identityAlignment` 保持 `.matching`，首次 CustomerInfo 返回前用本机已确认过的高级权益填充 `state.entitlement`（`.premiumInGracePeriod` + `entitlementTemporarilyMissing`，`freshness` 为 `.cachePermitted`，并带上上次确认时记录的到期日），真实响应一到就替换。RevenueCatKit 2.0 没记录到期日的存量 provenance 会从 RevenueCat 自己按身份隔离的 CustomerInfo 缓存补齐；上次到期日在七天内的订阅仍沿用既有撤权保护，以覆盖正常自动续费确认窗口。首次刷新失败仍落到 `.failed(error)`，由宿主既有网络 / 前台恢复路径重复声明同一身份后重试。没有本机确认记录、没有可核实的 RevenueCat 缓存，或到期已超过保护期时仍然是 `.unknown`。
 
 身份策略：
 

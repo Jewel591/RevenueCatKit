@@ -20,6 +20,12 @@ final class RevenueCatSDKAdapter: RevenueCatProviding {
         return Purchases.shared.isAnonymous
     }
 
+    var cachedCustomerInfo: ProviderCustomerInfo? {
+        guard let appUserID,
+              let customerInfo = Purchases.shared.cachedCustomerInfo else { return nil }
+        return makeCustomerInfo(customerInfo, fetchedForAppUserID: appUserID)
+    }
+
     func configure(
         apiKey: String,
         appUserID: String?,

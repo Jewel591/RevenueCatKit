@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.1 - 2026-09-04
+
+### Fixed
+
+- Keep a locally confirmed premium entitlement visible while the first launch refresh is in
+  flight, without carrying access across an identity switch or hiding a refresh failure.
+- Preserve the confirmed expiration in the launch seed, backfill RevenueCatKit 2.0 records from
+  RevenueCat's identity-scoped cache, and bound an elapsed subscription period by the existing
+  seven-day revocation grace.
+
 ## 2.0.0 - 2026-08-19
 
 RevenueCatKit 2.0 establishes the package as the single subscription domain
