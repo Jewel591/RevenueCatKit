@@ -394,9 +394,10 @@ final class RevenueCatGraceIntegrationTests: XCTestCase {
         XCTAssertEqual(client.state.accessLevel, .premium)
     }
 
-    /// #11: a refresh failure for an already aligned identity must not discard the locally
-    /// confirmed launch seed; offline customers retain access and can retry later.
-    func testAlignedRelaunchRetainsConfirmedPremiumWhenFirstFetchFails() async throws {
+    /// #11 scope boundary: the launch seed only covers an in-flight first refresh. A real
+    /// refresh failure must remain observable as `.failed` so hosts can run their documented
+    /// network and foreground retry path.
+    func testAlignedRelaunchReportsFirstFetchFailureForExplicitRetry() async throws {
         guard let context = makeContext() else { return XCTFail("Missing isolated defaults") }
         defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
 
@@ -425,9 +426,9 @@ final class RevenueCatGraceIntegrationTests: XCTestCase {
             XCTAssertEqual(error as? RevenueCatClientError, .networkUnavailable)
         }
 
-        XCTAssertEqual(relaunched.state.identityAlignment, .matching)
-        XCTAssertEqual(relaunched.state.accessLevel, .premiumInGracePeriod)
-        XCTAssertEqual(relaunched.state.entitlement?.expirationDate, renewal)
+        XCTAssertEqual(relaunched.state.identityAlignment, .failed(.networkUnavailable))
+        XCTAssertNil(relaunched.state.entitlement)
+        XCTAssertEqual(relaunched.state.accessLevel, .unknown)
     }
 
     /// #11 boundary: the seed is identity scoped. Switching to another account must still

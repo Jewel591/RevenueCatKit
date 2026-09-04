@@ -536,19 +536,10 @@ private extension RevenueCatClient {
             let normalized = normalizedClientError(error)
             if identityGeneration == generation,
                state.desiredIdentity == desiredIdentity {
-                if identityAlreadyAligned {
-                    // The provider identity is still the requested identity. Only its refresh
-                    // failed, so retain locally confirmed access for a later retry.
-                    publishProviderIdentity(
-                        entitlement: state.entitlement,
-                        identityAlignment: .matching
-                    )
-                } else {
-                    publishProviderIdentity(
-                        entitlement: nil,
-                        identityAlignment: .failed(normalized)
-                    )
-                }
+                publishProviderIdentity(
+                    entitlement: nil,
+                    identityAlignment: .failed(normalized)
+                )
             }
             throw normalized
         }
