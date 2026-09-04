@@ -10,7 +10,9 @@
   entitled." Purchase applies the bought product ID automatically; hosts read
   `state.entitlement?.diagnostics.diagnosis` after `.notEntitled` and do not reimplement
   the mapping-gap vs sync-delay split. The purchased product ID is frozen at purchase
-  start and kept across later CustomerInfo stream refreshes for the same identity (#13).
+  start and kept across later CustomerInfo stream refreshes only while that purchase
+  remains unentitled; a later confirmed entitlement returns refresh/restore to the
+  revocation path (#13).
 
 ## 2.0.1 - 2026-09-04
 

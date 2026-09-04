@@ -663,14 +663,28 @@ private extension RevenueCatClient {
             return existing
         }
 
-        // Purchase freezes the product ID at start. Stream refreshes and later
-        // unattributed fetches must not erase that context for the same identity.
-        let resolvedPurchaseProductID = purchasedProductID
-            ?? state.entitlement?.diagnostics.purchasedProductID
+        // Purchase freezes the product ID at start. Unattributed refreshes may
+        // keep that context only while the expected entitlement is still inactive
+        // and the existing snapshot is itself a purchase-path failure. A later
+        // confirmed entitlement must drop it, or expiry / refund is misread as a
+        // mapping gap.
+        let entitlementID = configuration.premiumEntitlementID.rawValue
+        let incomingIsActive =
+            customerInfo.entitlements[entitlementID]?.isActiveInCurrentEnvironment == true
+        let existingPurchaseFailureID: String? = {
+            guard let existing = state.entitlement,
+                  let productID = existing.diagnostics.purchasedProductID,
+                  existing.diagnostics.diagnosis != .entitlementActive
+            else { return nil }
+            return productID
+        }()
+        let resolvedPurchaseProductID = incomingIsActive
+            ? purchasedProductID
+            : purchasedProductID ?? existingPurchaseFailureID
 
         let incoming = makeEntitlementSnapshot(
             from: customerInfo,
-            entitlementID: configuration.premiumEntitlementID.rawValue,
+            entitlementID: entitlementID,
             freshness: freshness,
             appUserID: capture.appUserID.rawValue,
             purchasedProductID: resolvedPurchaseProductID

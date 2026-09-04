@@ -311,6 +311,48 @@ final class EntitlementDiagnosticsTests: XCTestCase {
         XCTAssertEqual(diagnostics?.diagnosis, .productNotAttachedToEntitlement)
     }
 
+    /// #13: a confirmed entitlement must drop purchase-path attribution, or a
+    /// later expiry / refund refresh is misread as a Dashboard mapping gap.
+    func testLaterRevocationAfterSuccessfulPurchaseUsesRevocationPath() async throws {
+        let (client, provider, optionID) = try await makeClientWithOption()
+        provider.purchaseResponse = .success(
+            .init(
+                customerInfo: makeCustomerInfo(
+                    appUserID: "user-a",
+                    requestDate: Date(timeIntervalSince1970: 4_000),
+                    entitlement: makeEntitlement(isActiveInCurrentEnvironment: true),
+                    allPurchasedProductIDs: ["premium.monthly"]
+                ),
+                userCancelled: false
+            )
+        )
+
+        let outcome = try await client.purchase(optionID)
+        guard case .purchased = outcome else {
+            return XCTFail("Expected a successful purchase")
+        }
+
+        provider.customerInfoResponses = [
+            .success(
+                makeCustomerInfo(
+                    appUserID: "user-a",
+                    requestDate: Date(timeIntervalSince1970: 5_000),
+                    entitlement: makeEntitlement(isActiveInCurrentEnvironment: false),
+                    allPurchasedProductIDs: ["premium.monthly"]
+                )
+            ),
+        ]
+        provider.emitCustomerInfoInvalidation()
+        let didReRead = await waitUntil {
+            provider.customerInfoPolicies.contains(.notStaleCachedOrFetched)
+        }
+        XCTAssertTrue(didReRead)
+
+        let diagnostics = client.state.entitlement?.diagnostics
+        XCTAssertNil(diagnostics?.purchasedProductID)
+        XCTAssertEqual(diagnostics?.diagnosis, .entitlementInactiveUnknownCause)
+    }
+
     /// #13: offering reload drops prior option IDs. The product ID captured at
     /// purchase start must still classify the completed `.notEntitled` result.
     func testOfferingReloadDuringPurchaseStillClassifiesWithFrozenProductID() async throws {
