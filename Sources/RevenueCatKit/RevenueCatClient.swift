@@ -693,19 +693,31 @@ private extension RevenueCatClient {
             accessLevel = .free
             billingCondition = .expired
         } else if entitlement.billingIssueDetectedAt != nil {
-            revocationGrace.recordConfirmedPremium(identity: appUserID)
+            revocationGrace.recordConfirmedPremium(
+                identity: appUserID,
+                expirationDate: entitlement.expirationDate
+            )
             accessLevel = .premiumInGracePeriod
             billingCondition = .billingIssueWhileActive
         } else if entitlement.unsubscribeDetectedAt != nil {
-            revocationGrace.recordConfirmedPremium(identity: appUserID)
+            revocationGrace.recordConfirmedPremium(
+                identity: appUserID,
+                expirationDate: entitlement.expirationDate
+            )
             accessLevel = .premium
             billingCondition = .cancelledButActive
         } else if entitlement.expirationDate == nil {
-            revocationGrace.recordConfirmedPremium(identity: appUserID)
+            revocationGrace.recordConfirmedPremium(
+                identity: appUserID,
+                expirationDate: entitlement.expirationDate
+            )
             accessLevel = .premium
             billingCondition = .notApplicable
         } else {
-            revocationGrace.recordConfirmedPremium(identity: appUserID)
+            revocationGrace.recordConfirmedPremium(
+                identity: appUserID,
+                expirationDate: entitlement.expirationDate
+            )
             accessLevel = .premium
             billingCondition = .healthy
         }

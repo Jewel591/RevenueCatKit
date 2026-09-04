@@ -56,7 +56,7 @@ final class PremiumRevocationGraceTests: XCTestCase {
                 defaults: defaults,
                 now: { Date(timeIntervalSince1970: currentTime) }
             )
-            grace.recordConfirmedPremium(identity: "user-a")
+            grace.recordConfirmedPremium(identity: "user-a", expirationDate: nil)
 
             let first = grace.resolveMissingEntitlement(
                 identity: "user-a",
@@ -89,7 +89,7 @@ final class PremiumRevocationGraceTests: XCTestCase {
                 defaults: defaults,
                 now: { Date(timeIntervalSince1970: currentTime) }
             )
-            grace.recordConfirmedPremium(identity: "user-a")
+            grace.recordConfirmedPremium(identity: "user-a", expirationDate: nil)
             XCTAssertNotNil(
                 grace.resolveMissingEntitlement(
                     identity: "user-a",
@@ -123,7 +123,7 @@ final class PremiumRevocationGraceTests: XCTestCase {
                 defaults: defaults,
                 now: { Date(timeIntervalSince1970: currentTime) }
             )
-            grace.recordConfirmedPremium(identity: "user-a")
+            grace.recordConfirmedPremium(identity: "user-a", expirationDate: nil)
             XCTAssertNotNil(
                 grace.resolveMissingEntitlement(
                     identity: "user-a",
@@ -133,7 +133,7 @@ final class PremiumRevocationGraceTests: XCTestCase {
             )
 
             currentTime += PremiumRevocationGrace.period - 1
-            grace.recordConfirmedPremium(identity: "user-a")
+            grace.recordConfirmedPremium(identity: "user-a", expirationDate: nil)
             currentTime += 2
 
             XCTAssertNotNil(
@@ -149,7 +149,7 @@ final class PremiumRevocationGraceTests: XCTestCase {
     func testConfirmedPremiumNeverLeaksAcrossAccountSwitch() {
         withDefaults { defaults in
             let grace = PremiumRevocationGrace(defaults: defaults)
-            grace.recordConfirmedPremium(identity: "user-a")
+            grace.recordConfirmedPremium(identity: "user-a", expirationDate: nil)
 
             XCTAssertNotNil(
                 grace.resolveMissingEntitlement(

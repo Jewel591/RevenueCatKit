@@ -206,8 +206,11 @@ final class RevenueCatGraceIntegrationTests: XCTestCase {
         guard let context = makeContext() else { return XCTFail("Missing isolated defaults") }
         defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
 
+        let renewal = Date(timeIntervalSince1970: context.clock.value + 86_400)
         let provider = identifiedProvider()
-        provider.customerInfoResponses = [.success(activeInfo(requestDate: 1_000))]
+        provider.customerInfoResponses = [
+            .success(activeInfo(requestDate: 1_000, expirationDate: renewal)),
+        ]
         let client = makeClient(provider: provider, defaults: context.defaults, clock: context.clock)
         client.setDesiredIdentity(.account("user-a"))
         try await client.configure(makeConfiguration())
@@ -229,8 +232,13 @@ final class RevenueCatGraceIntegrationTests: XCTestCase {
         XCTAssertTrue(didSeedPremium)
         XCTAssertEqual(relaunched.state.identityAlignment, .matching)
         XCTAssertEqual(relaunched.state.entitlement?.freshness, .cachePermitted)
+        // A subscriber must not be seeded as "premium with no expiration date": every consumer
+        // reads that as a lifetime purchase.
+        XCTAssertEqual(relaunched.state.entitlement?.expirationDate, renewal)
 
-        relaunchedProvider.resumeCustomerInfo(with: .success(activeInfo(requestDate: 2_000)))
+        relaunchedProvider.resumeCustomerInfo(
+            with: .success(activeInfo(requestDate: 2_000, expirationDate: renewal))
+        )
         try await configureTask.value
         XCTAssertEqual(relaunched.state.accessLevel, .premium)
         XCTAssertEqual(relaunched.state.entitlement?.requestDate, Date(timeIntervalSince1970: 2_000))
@@ -255,6 +263,71 @@ final class RevenueCatGraceIntegrationTests: XCTestCase {
         XCTAssertEqual(client.state.accessLevel, .unknown)
 
         provider.resumeCustomerInfo(with: .success(activeInfo(requestDate: 1_000)))
+        try await configureTask.value
+        XCTAssertEqual(client.state.accessLevel, .premium)
+    }
+
+    /// #11 boundary: a confirmed expiration that has already elapsed proves nothing about the
+    /// current period, so the launch window stays `unknown` rather than claiming premium.
+    func testLapsedConfirmedExpirationIsNotSeededOnRelaunch() async throws {
+        guard let context = makeContext() else { return XCTFail("Missing isolated defaults") }
+        defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
+
+        let lapsed = Date(timeIntervalSince1970: context.clock.value - 60)
+        let provider = identifiedProvider()
+        provider.customerInfoResponses = [
+            .success(activeInfo(requestDate: 1_000, expirationDate: lapsed)),
+        ]
+        let client = makeClient(provider: provider, defaults: context.defaults, clock: context.clock)
+        client.setDesiredIdentity(.account("user-a"))
+        try await client.configure(makeConfiguration())
+        XCTAssertEqual(client.state.accessLevel, .premium)
+
+        let relaunchedProvider = identifiedProvider()
+        relaunchedProvider.suspendCustomerInfo = true
+        let relaunched = makeClient(
+            provider: relaunchedProvider,
+            defaults: context.defaults,
+            clock: context.clock
+        )
+        relaunched.setDesiredIdentity(.account("user-a"))
+        let configureTask = Task { try await relaunched.configure(makeConfiguration()) }
+
+        let didReachProvider = await waitUntil {
+            !relaunchedProvider.customerInfoPolicies.isEmpty
+        }
+        XCTAssertTrue(didReachProvider)
+        XCTAssertEqual(relaunched.state.accessLevel, .unknown)
+
+        relaunchedProvider.resumeCustomerInfo(
+            with: .success(activeInfo(requestDate: 2_000, expirationDate: lapsed))
+        )
+        try await configureTask.value
+    }
+
+    /// #11 boundary: a migrated legacy record carries no confirmed expiration. Seeding it would
+    /// have to guess, so the launch window keeps the pre-fix behaviour until the next
+    /// confirmation records the real value.
+    func testMigratedLegacyRecordWithoutConfirmedExpirationIsNotSeeded() async throws {
+        guard let context = makeContext() else { return XCTFail("Missing isolated defaults") }
+        defer { context.defaults.removePersistentDomain(forName: context.suiteName) }
+        context.defaults.set(true, forKey: "hasSyncedPremiumAccess")
+        context.defaults.set(true, forKey: "cachedPremiumAccess")
+
+        let provider = identifiedProvider()
+        provider.suspendCustomerInfo = true
+        let client = makeClient(provider: provider, defaults: context.defaults, clock: context.clock)
+        client.setDesiredIdentity(.account("user-a"))
+        let configureTask = Task { try await client.configure(makeConfiguration()) }
+
+        let didReachProvider = await waitUntil { !provider.customerInfoPolicies.isEmpty }
+        XCTAssertTrue(didReachProvider)
+        XCTAssertEqual(client.state.accessLevel, .unknown)
+
+        let renewal = Date(timeIntervalSince1970: context.clock.value + 86_400)
+        provider.resumeCustomerInfo(
+            with: .success(activeInfo(requestDate: 1_000, expirationDate: renewal))
+        )
         try await configureTask.value
         XCTAssertEqual(client.state.accessLevel, .premium)
     }
@@ -319,11 +392,17 @@ final class RevenueCatGraceIntegrationTests: XCTestCase {
         return provider
     }
 
-    private func activeInfo(requestDate: TimeInterval) -> ProviderCustomerInfo {
+    private func activeInfo(
+        requestDate: TimeInterval,
+        expirationDate: Date? = Date(timeIntervalSince1970: 2_000)
+    ) -> ProviderCustomerInfo {
         makeCustomerInfo(
             appUserID: "user-a",
             requestDate: Date(timeIntervalSince1970: requestDate),
-            entitlement: makeEntitlement(isActiveInCurrentEnvironment: true)
+            entitlement: makeEntitlement(
+                isActiveInCurrentEnvironment: true,
+                expirationDate: expirationDate
+            )
         )
     }
 }
