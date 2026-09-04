@@ -227,7 +227,8 @@ final class RevenueCatSDKAdapter: RevenueCatProviding {
         return .init(
             fetchedForAppUserID: fetchedForAppUserID,
             requestDate: customerInfo.requestDate,
-            entitlements: entitlements
+            entitlements: entitlements,
+            allPurchasedProductIDs: customerInfo.allPurchasedProductIdentifiers
         )
     }
 

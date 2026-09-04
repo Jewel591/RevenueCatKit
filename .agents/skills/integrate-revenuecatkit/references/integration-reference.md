@@ -239,6 +239,8 @@ case .cancelled:
 case .pending:
     showPendingMessage()
 case .notEntitled:
+    let diagnosis = RevenueCatClient.shared.state.entitlement?.diagnostics.diagnosis
+    reportPurchaseWithoutEntitlement(diagnosis)
     showPurchaseNotActivatedMessage()
 }
 ```

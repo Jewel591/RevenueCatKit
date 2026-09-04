@@ -152,7 +152,26 @@ let premiumAccess: Bool? = RevenueCatClient.shared.state.accessLevel.premiumAcce
 
 其中 `true` 表示已确认有权限，`false` 表示已确认免费，`nil` 表示尚未得到可信结论。
 
-需要更多诊断信息时读取 `state.entitlement`，其中包含账单状态、到期时间、Store、Sandbox 标记、请求时间和快照新鲜度。需要绕过缓存主动确认时：
+需要更多诊断信息时读取 `state.entitlement`，其中包含账单状态、到期时间、Store、Sandbox 标记、请求时间和快照新鲜度。`state.entitlement.diagnostics` 另带 RevenueCat 已记录的 entitlement key、当前环境激活 key，以及该用户名下出现过的产品 ID。这些集合是诊断数据，不是业务配置，也不得用来判断是否解锁功能。
+
+购买返回 `.notEntitled`，或刷新后权益未激活时，用 Kit 给出的判别结论，不要在宿主里再写一套：
+
+```swift
+let diagnostics = RevenueCatClient.shared.state.entitlement?.diagnostics
+let diagnosis = diagnostics?.diagnosis
+```
+
+`diagnosis` 区分的是处置动作，不是用户可见文案：
+
+- `.productNotAttachedToEntitlement`：该产品 ID 已出现在用户名下，但期望的 entitlement 未激活。通常是后台「产品 → entitlement」映射漏配。
+- `.transactionNotYetSynced`：该产品 ID 尚未出现在用户名下。按同步延迟处理，重试恢复购买，不要改后台映射。
+- 无本次购买上下文时，才会落到 `.entitlementIDMissing` 或 `.entitlementInactiveUnknownCause`。
+
+`allPurchasedProductIDs` 是该用户的产品历史，不是「这一笔交易已入账」。同一 product ID 复购时，旧记录仍在集合里。上报时使用 `diagnostics.telemetryContext`，集合已排序，便于在 Sentry 里比对。
+
+`entitlements.all` 只包含该用户被授予过的 key，不是项目级 entitlement 全表。首购未到账时它恒为空，所以有购买上下文时必须先看产品是否已在用户名下，不能先查 key 是否存在。
+
+需要绕过缓存主动确认时：
 
 ```swift
 let snapshot = try await RevenueCatClient.shared.forceRefresh()

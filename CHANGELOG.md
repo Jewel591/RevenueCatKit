@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Expose `EntitlementDiagnostics` on every `EntitlementSnapshot`, including the customer's
+  entitlement keys, current-environment active keys, and lifetime purchased product IDs.
+- Add `EntitlementFailureDiagnosis` as the house-standard classifier for "paid but not
+  entitled." Purchase applies the bought product ID automatically; hosts read
+  `state.entitlement?.diagnostics.diagnosis` after `.notEntitled` and do not reimplement
+  the mapping-gap vs sync-delay split (#13).
+
 ## 2.0.1 - 2026-09-04
 
 ### Fixed

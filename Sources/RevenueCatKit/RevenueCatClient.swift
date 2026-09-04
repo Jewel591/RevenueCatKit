@@ -303,7 +303,8 @@ public final class RevenueCatClient {
                 let snapshot = try applyCustomerInfo(
                     result.customerInfo,
                     freshness: .networkConfirmed,
-                    capture: capture
+                    capture: capture,
+                    purchasedProductID: productID(for: optionID)
                 )
                 if snapshot.confirmsPurchaseEntitlement {
                     return .purchased(snapshot)
@@ -314,7 +315,11 @@ public final class RevenueCatClient {
                 return .notEntitled
             } catch {
                 try validateCompletion(capture: capture)
-                return try await handlePurchaseError(error, capture: capture)
+                return try await handlePurchaseError(
+                    error,
+                    capture: capture,
+                    purchasedProductID: productID(for: optionID)
+                )
             }
         }
     }
@@ -547,7 +552,8 @@ private extension RevenueCatClient {
 
     func handlePurchaseError(
         _ error: Error,
-        capture: IdentityCapture
+        capture: IdentityCapture,
+        purchasedProductID: String?
     ) async throws -> PurchaseOutcome {
         guard let providerError = error as? ProviderError else {
             throw normalizedError(error)
@@ -562,7 +568,8 @@ private extension RevenueCatClient {
             do {
                 let snapshot = try await fetchAndApplyCustomerInfo(
                     policy: .fetchCurrent,
-                    capture: capture
+                    capture: capture,
+                    purchasedProductID: purchasedProductID
                 )
                 guard snapshot.confirmsPurchaseEntitlement else {
                     throw RevenueCatClientError.invalidPurchase
@@ -575,7 +582,8 @@ private extension RevenueCatClient {
             do {
                 let snapshot = try await fetchAndApplyCustomerInfo(
                     policy: .fetchCurrent,
-                    capture: capture
+                    capture: capture,
+                    purchasedProductID: purchasedProductID
                 )
                 guard snapshot.confirmsPurchaseEntitlement else {
                     throw RevenueCatClientError.purchaseStatusUnknown
@@ -617,14 +625,16 @@ private extension RevenueCatClient {
 
     func fetchAndApplyCustomerInfo(
         policy: CustomerInfoFetchPolicy,
-        capture: IdentityCapture
+        capture: IdentityCapture,
+        purchasedProductID: String? = nil
     ) async throws -> EntitlementSnapshot {
         do {
             let customerInfo = try await provider.customerInfo(policy: policy)
             return try applyCustomerInfo(
                 customerInfo,
                 freshness: policy == .fetchCurrent ? .networkConfirmed : .cachePermitted,
-                capture: capture
+                capture: capture,
+                purchasedProductID: purchasedProductID
             )
         } catch {
             throw normalizedError(error)
@@ -634,7 +644,8 @@ private extension RevenueCatClient {
     func applyCustomerInfo(
         _ customerInfo: ProviderCustomerInfo,
         freshness: SnapshotFreshness,
-        capture: IdentityCapture
+        capture: IdentityCapture,
+        purchasedProductID: String? = nil
     ) throws -> EntitlementSnapshot {
         try validateCompletion(
             capture: capture,
@@ -655,7 +666,8 @@ private extension RevenueCatClient {
             from: customerInfo,
             entitlementID: configuration.premiumEntitlementID.rawValue,
             freshness: freshness,
-            appUserID: capture.appUserID.rawValue
+            appUserID: capture.appUserID.rawValue,
+            purchasedProductID: purchasedProductID
         )
 
         if let existing = state.entitlement {
@@ -677,19 +689,52 @@ private extension RevenueCatClient {
         return incoming
     }
 
+    func productID(for optionID: PurchaseOptionID) -> String? {
+        for offering in state.offerings.values {
+            if let option = offering.purchaseOptions.first(where: { $0.id == optionID }) {
+                return option.productID
+            }
+        }
+        return nil
+    }
+
+    func makeDiagnostics(
+        from customerInfo: ProviderCustomerInfo,
+        entitlementID: String,
+        purchasedProductID: String?
+    ) -> EntitlementDiagnostics {
+        EntitlementDiagnostics(
+            expectedEntitlementID: entitlementID,
+            allEntitlementIDs: Set(customerInfo.entitlements.keys),
+            activeEntitlementIDs: Set(
+                customerInfo.entitlements.compactMap { identifier, entitlement in
+                    entitlement.isActiveInCurrentEnvironment ? identifier : nil
+                }
+            ),
+            allPurchasedProductIDs: customerInfo.allPurchasedProductIDs,
+            purchasedProductID: purchasedProductID
+        )
+    }
+
     func makeEntitlementSnapshot(
         from customerInfo: ProviderCustomerInfo,
         entitlementID: String,
         freshness: SnapshotFreshness,
-        appUserID: String
+        appUserID: String,
+        purchasedProductID: String? = nil
     ) -> EntitlementSnapshot {
+        let diagnostics = makeDiagnostics(
+            from: customerInfo,
+            entitlementID: entitlementID,
+            purchasedProductID: purchasedProductID
+        )
         guard let entitlement = customerInfo.entitlements[entitlementID] else {
             if let protectedSnapshot = revocationGrace.resolveMissingEntitlement(
                 identity: appUserID,
                 requestDate: customerInfo.requestDate,
                 freshness: freshness
             ) {
-                return protectedSnapshot
+                return protectedSnapshot.withDiagnostics(diagnostics)
             }
             return .init(
                 accessLevel: .free,
@@ -700,7 +745,8 @@ private extension RevenueCatClient {
                 store: .unknown,
                 isSandbox: false,
                 requestDate: customerInfo.requestDate,
-                freshness: freshness
+                freshness: freshness,
+                diagnostics: diagnostics
             )
         }
 
@@ -749,7 +795,8 @@ private extension RevenueCatClient {
             store: entitlement.store,
             isSandbox: entitlement.isSandbox,
             requestDate: customerInfo.requestDate,
-            freshness: freshness
+            freshness: freshness,
+            diagnostics: diagnostics
         )
     }
 
