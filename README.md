@@ -165,7 +165,7 @@ let diagnosis = diagnostics?.diagnosis
 
 - `.productNotAttachedToEntitlement`：该产品 ID 已出现在用户名下，但期望的 entitlement 未激活。通常是后台「产品 → entitlement」映射漏配。
 - `.transactionNotYetSynced`：该产品 ID 尚未出现在用户名下。按同步延迟处理，重试恢复购买，不要改后台映射。
-- 无本次购买上下文时，才会落到 `.entitlementIDMissing` 或 `.entitlementInactiveUnknownCause`。
+- 无本次购买上下文时，才会落到 `.entitlementIDMissing` 或 `.entitlementInactiveUnknownCause`。购买路径会在下单时冻结产品 ID；同一身份后续的 CustomerInfo 流刷新不得把它抹掉。
 
 `allPurchasedProductIDs` 是该用户的产品历史，不是「这一笔交易已入账」。同一 product ID 复购时，旧记录仍在集合里。上报时使用 `diagnostics.telemetryContext`，集合已排序，便于在 Sentry 里比对。
 

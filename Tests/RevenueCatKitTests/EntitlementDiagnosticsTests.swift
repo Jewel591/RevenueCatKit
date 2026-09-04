@@ -267,6 +267,88 @@ final class EntitlementDiagnosticsTests: XCTestCase {
         )
     }
 
+    /// #13: RevenueCat emits CustomerInfo on purchase. The stream refresh has no
+    /// purchase context and must not replace the mapping-gap / sync-delay verdict
+    /// with the revocation-path fallback.
+    func testStreamRefreshAfterNotEntitledPurchaseKeepsPurchasePathDiagnosis() async throws {
+        let (client, provider, optionID) = try await makeClientWithOption()
+        let purchaseDate = Date(timeIntervalSince1970: 4_000)
+        provider.purchaseResponse = .success(
+            .init(
+                customerInfo: makeCustomerInfo(
+                    appUserID: "user-a",
+                    requestDate: purchaseDate,
+                    allPurchasedProductIDs: ["premium.monthly"]
+                ),
+                userCancelled: false
+            )
+        )
+
+        let outcome = try await client.purchase(optionID)
+        XCTAssertEqual(outcome, .notEntitled)
+        XCTAssertEqual(
+            client.state.entitlement?.diagnostics.diagnosis,
+            .productNotAttachedToEntitlement
+        )
+
+        provider.customerInfoResponses = [
+            .success(
+                makeCustomerInfo(
+                    appUserID: "user-a",
+                    requestDate: Date(timeIntervalSince1970: 4_001),
+                    allPurchasedProductIDs: ["premium.monthly"]
+                )
+            ),
+        ]
+        provider.emitCustomerInfoInvalidation()
+        let didReRead = await waitUntil {
+            provider.customerInfoPolicies.contains(.notStaleCachedOrFetched)
+        }
+        XCTAssertTrue(didReRead)
+
+        let diagnostics = client.state.entitlement?.diagnostics
+        XCTAssertEqual(diagnostics?.purchasedProductID, "premium.monthly")
+        XCTAssertEqual(diagnostics?.diagnosis, .productNotAttachedToEntitlement)
+    }
+
+    /// #13: offering reload drops prior option IDs. The product ID captured at
+    /// purchase start must still classify the completed `.notEntitled` result.
+    func testOfferingReloadDuringPurchaseStillClassifiesWithFrozenProductID() async throws {
+        let (client, provider, optionID) = try await makeClientWithOption()
+        provider.suspendPurchase = true
+        let purchase = Task { @MainActor in
+            try await client.purchase(optionID)
+        }
+        let didStartPurchase = await waitUntil { provider.purchaseCallCount == 1 }
+        XCTAssertTrue(didStartPurchase)
+
+        provider.offeringValue = makeProviderOffering(
+            offeringID: "default",
+            packageIdentifier: "$rc_monthly"
+        )
+        guard case .available = try await client.loadOffering() else {
+            return XCTFail("Expected reloaded offering")
+        }
+
+        provider.resumePurchase(
+            with: .success(
+                .init(
+                    customerInfo: makeCustomerInfo(
+                        appUserID: "user-a",
+                        allPurchasedProductIDs: ["premium.monthly"]
+                    ),
+                    userCancelled: false
+                )
+            )
+        )
+        let outcome = try await purchase.value
+        XCTAssertEqual(outcome, .notEntitled)
+
+        let diagnostics = client.state.entitlement?.diagnostics
+        XCTAssertEqual(diagnostics?.purchasedProductID, "premium.monthly")
+        XCTAssertEqual(diagnostics?.diagnosis, .productNotAttachedToEntitlement)
+    }
+
     func testFreshnessMergePreservesDiagnosticCollections() async throws {
         let date = Date(timeIntervalSince1970: 3_000)
         let info = makeCustomerInfo(

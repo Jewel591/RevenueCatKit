@@ -289,7 +289,8 @@ public final class RevenueCatClient {
         try requireConfigured()
         try requireStableReadIdentity()
         try requireAlignedIdentity()
-        guard let handle = optionHandles[optionID] else {
+        guard let handle = optionHandles[optionID],
+              let purchasedProductID = productID(for: optionID) else {
             throw RevenueCatClientError.optionUnavailable
         }
         let capture = try captureIdentity()
@@ -304,7 +305,7 @@ public final class RevenueCatClient {
                     result.customerInfo,
                     freshness: .networkConfirmed,
                     capture: capture,
-                    purchasedProductID: productID(for: optionID)
+                    purchasedProductID: purchasedProductID
                 )
                 if snapshot.confirmsPurchaseEntitlement {
                     return .purchased(snapshot)
@@ -318,7 +319,7 @@ public final class RevenueCatClient {
                 return try await handlePurchaseError(
                     error,
                     capture: capture,
-                    purchasedProductID: productID(for: optionID)
+                    purchasedProductID: purchasedProductID
                 )
             }
         }
@@ -662,12 +663,17 @@ private extension RevenueCatClient {
             return existing
         }
 
+        // Purchase freezes the product ID at start. Stream refreshes and later
+        // unattributed fetches must not erase that context for the same identity.
+        let resolvedPurchaseProductID = purchasedProductID
+            ?? state.entitlement?.diagnostics.purchasedProductID
+
         let incoming = makeEntitlementSnapshot(
             from: customerInfo,
             entitlementID: configuration.premiumEntitlementID.rawValue,
             freshness: freshness,
             appUserID: capture.appUserID.rawValue,
-            purchasedProductID: purchasedProductID
+            purchasedProductID: resolvedPurchaseProductID
         )
 
         if let existing = state.entitlement {
