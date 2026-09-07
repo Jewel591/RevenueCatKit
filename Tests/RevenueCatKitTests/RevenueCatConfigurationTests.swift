@@ -177,11 +177,11 @@ final class RevenueCatConfigurationTests: XCTestCase {
     func testInitialRefreshFailureCanRetryWithoutReconfigureOrSecondObserver() async throws {
         let provider = FakeRevenueCatProvider()
         seedPersistedAccount(provider)
-        provider.customerInfoResponses = [.failure(.network)]
+        provider.customerInfoResponses = [.failure(.network(.init(category: .network)))]
         let client = RevenueCatClient(provider: provider)
         client.setDesiredIdentity(.account("user-a"))
 
-        await assertClientError(.networkUnavailable) {
+        await assertClientError(.networkUnavailable(.init(category: .network))) {
             try await client.configure(makeConfiguration())
         }
         XCTAssertNil(client.state.entitlement)

@@ -411,7 +411,7 @@ final class RevenueCatGraceIntegrationTests: XCTestCase {
         try await client.configure(makeConfiguration())
 
         let relaunchedProvider = identifiedProvider()
-        relaunchedProvider.customerInfoResponses = [.failure(.network)]
+        relaunchedProvider.customerInfoResponses = [.failure(.network(.init(category: .network)))]
         let relaunched = makeClient(
             provider: relaunchedProvider,
             defaults: context.defaults,
@@ -423,10 +423,10 @@ final class RevenueCatGraceIntegrationTests: XCTestCase {
             try await relaunched.configure(makeConfiguration())
             XCTFail("Expected the network refresh to fail")
         } catch {
-            XCTAssertEqual(error as? RevenueCatClientError, .networkUnavailable)
+            XCTAssertEqual(error as? RevenueCatClientError, .networkUnavailable(.init(category: .network)))
         }
 
-        XCTAssertEqual(relaunched.state.identityAlignment, .failed(.networkUnavailable))
+        XCTAssertEqual(relaunched.state.identityAlignment, .failed(.networkUnavailable(.init(category: .network))))
         XCTAssertNil(relaunched.state.entitlement)
         XCTAssertEqual(relaunched.state.accessLevel, .unknown)
     }

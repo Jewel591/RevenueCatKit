@@ -83,11 +83,11 @@ final class RevenueCatStateOrchestrationTests: XCTestCase {
     func testSameDesiredIdentityRetriesOnlyAfterAlignmentFailure() async throws {
         let provider = FakeRevenueCatProvider()
         let client = try await makeConfiguredClient(provider: provider)
-        provider.logInResponse = .failure(.network)
+        provider.logInResponse = .failure(.network(.init(category: .network)))
 
         client.setDesiredIdentity(.account("user-b"))
         let didFailAlignment = await waitUntil {
-            client.state.identityAlignment == .failed(.networkUnavailable)
+            client.state.identityAlignment == .failed(.networkUnavailable(.init(category: .network)))
         }
         XCTAssertTrue(didFailAlignment)
         XCTAssertEqual(provider.logInCallCount, 1)
@@ -211,9 +211,9 @@ final class RevenueCatStateOrchestrationTests: XCTestCase {
         provider.offeringValue = .init(identifier: "empty", packages: [])
         let empty = try await client.loadOffering()
         XCTAssertEqual(empty, .empty)
-        provider.offeringError = .network
+        provider.offeringError = .network(.init(category: .network))
         let failed = try await client.loadOffering()
-        XCTAssertEqual(failed, .failed(.networkUnavailable))
+        XCTAssertEqual(failed, .failed(.networkUnavailable(.init(category: .network))))
         XCTAssertTrue(client.state.offering(for: .current).purchaseOptions.isEmpty)
         await assertClientError(.optionUnavailable) {
             _ = try await client.purchase(staleOptionID)

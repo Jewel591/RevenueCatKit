@@ -1312,8 +1312,8 @@ private extension RevenueCatClient {
             return error is CancellationError ? CancellationError() : RevenueCatClientError.unknown
         }
         switch error {
-        case .network:
-            return RevenueCatClientError.networkUnavailable
+        case .network(let diagnostics):
+            return RevenueCatClientError.networkUnavailable(diagnostics)
         case .purchaseNotAllowed, .productNotAvailable:
             return RevenueCatClientError.storeUnavailable
         case .purchaseInvalid, .invalidReceipt, .invalidAppUserID:

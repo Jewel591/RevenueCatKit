@@ -162,24 +162,24 @@ final class RevenueCatEntitlementTests: XCTestCase {
                     entitlement: makeEntitlement(isActiveInCurrentEnvironment: true)
                 )
             ),
-            .failure(.network),
+            .failure(.network(.init(category: .network))),
         ]
         let client = RevenueCatClient(provider: provider)
         client.setDesiredIdentity(.account("user-a"))
         try await client.configure(makeConfiguration())
         let known = client.state.entitlement
 
-        await assertClientError(.networkUnavailable) {
+        await assertClientError(.networkUnavailable(.init(category: .network))) {
             _ = try await client.refresh()
         }
         XCTAssertEqual(client.state.entitlement, known)
 
         let failingProvider = FakeRevenueCatProvider()
         seedPersistedAccount(failingProvider)
-        failingProvider.customerInfoResponses = [.failure(.network)]
+        failingProvider.customerInfoResponses = [.failure(.network(.init(category: .network)))]
         let failingClient = RevenueCatClient(provider: failingProvider)
         failingClient.setDesiredIdentity(.account("user-a"))
-        await assertClientError(.networkUnavailable) {
+        await assertClientError(.networkUnavailable(.init(category: .network))) {
             try await failingClient.configure(makeConfiguration())
         }
         XCTAssertNil(failingClient.state.entitlement)

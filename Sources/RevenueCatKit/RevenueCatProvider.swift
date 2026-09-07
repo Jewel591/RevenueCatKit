@@ -36,7 +36,7 @@ enum ProviderError: Error, Sendable, Equatable {
     case invalidAppUserID
     case paymentPending
     case logOutAnonymousUser
-    case network
+    case network(NetworkFailureDiagnostics)
     case operationInProgress
     case optionUnavailable
     case taskCancelled

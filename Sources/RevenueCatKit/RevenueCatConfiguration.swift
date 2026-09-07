@@ -115,7 +115,7 @@ public enum RevenueCatClientError: Error, Sendable, Equatable {
     case anonymousIdentityUnavailable
     case operationInProgress
     case optionUnavailable
-    case networkUnavailable
+    case networkUnavailable(NetworkFailureDiagnostics)
     case storeUnavailable
     case purchaseStatusUnknown
     case invalidPurchase
