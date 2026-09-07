@@ -223,6 +223,15 @@ let outcome = try await RevenueCatClient.shared.restorePurchases()
 
 上层只处理 `RevenueCatClientError`，无需依赖 RevenueCat `ErrorCode`。可观察的 `client.state.operation` 用于统一驱动加载态和禁用重复点击。
 
+### 网络诊断与 3.0 接入
+
+`RevenueCatClientError.networkUnavailable` 携带 `NetworkFailureDiagnostics`。诊断属于当前错误实例；Kit 不维护共享的“最近一次错误”，也不改变权益、重试或用户取消行为。
+
+宿主在现有错误事件中合并 `error.networkDiagnostics?.telemetryContext`。`network_category` 固定为 `network`、`offline` 或 `endpoint_blocked`；仅直接底层错误属于 `NSURLErrorDomain` 且错误码命中 `TransportCode` 白名单时，附带 `network_transport_domain` 和 `network_transport_code`。缺失字段表示没有可保留的证据，不代表某种网络原因已被排除。诊断不保存 URL、描述、任意 userInfo、账户或收据。
+
+3.0 是源代码不兼容版本：将依赖最低版本设为 `3.0.0`，使用兼容范围并提交实际解析后的 `Package.resolved`。`case .networkUnavailable:` 分类仍可沿用；构造测试错误时改为 `.networkUnavailable(.init(category: .network))`。错误相等比较包含诊断载荷，按类别判断应使用模式匹配。2.x 消费者必须单独完成升级与遥测接线，发布 Kit 本身不会补齐宿主上报，也不代表产品购买故障已修复。
+
+
 `DistributionChannel` 只用于诊断和环境标记，绝不参与会员权限判断。
 
 ## 接入验收

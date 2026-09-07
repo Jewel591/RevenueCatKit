@@ -51,10 +51,10 @@ final class RevenueCatOfferingAndIdentityTests: XCTestCase {
     func testProviderFailureIsNotConflatedWithMissingOffering() async throws {
         let provider = FakeRevenueCatProvider()
         let client = try await makeConfiguredClient(provider: provider)
-        provider.offeringError = .network
+        provider.offeringError = .network(.init(category: .network))
 
         let result = try await client.loadOffering()
-        XCTAssertEqual(result, .failed(.networkUnavailable))
+        XCTAssertEqual(result, .failed(.networkUnavailable(.init(category: .network))))
     }
 
     func testMissingRefreshInvalidatesPreviouslyReturnedOption() async throws {
@@ -218,11 +218,11 @@ final class RevenueCatOfferingAndIdentityTests: XCTestCase {
             entitlement: makeEntitlement(isActiveInCurrentEnvironment: true)
         )
         let client = try await makeConfiguredClient(provider: provider, initialCustomerInfo: initial)
-        provider.logInResponse = .failure(.network)
+        provider.logInResponse = .failure(.network(.init(category: .network)))
 
         client.setDesiredIdentity(.account("user-b"))
         let didFail = await waitUntil {
-            client.state.identityAlignment == .failed(.networkUnavailable)
+            client.state.identityAlignment == .failed(.networkUnavailable(.init(category: .network)))
         }
         XCTAssertTrue(didFail)
 

@@ -101,8 +101,8 @@ final class RevenueCatPurchaseTests: XCTestCase {
         do {
             let (client, provider, optionID) = try await makeClientWithOption()
             provider.purchaseResponse = .failure(.productAlreadyPurchased)
-            provider.customerInfoResponses = [.failure(.network)]
-            await assertClientError(.networkUnavailable) {
+            provider.customerInfoResponses = [.failure(.network(.init(category: .network)))]
+            await assertClientError(.networkUnavailable(.init(category: .network))) {
                 _ = try await client.purchase(optionID)
             }
         }
@@ -140,8 +140,8 @@ final class RevenueCatPurchaseTests: XCTestCase {
         do {
             let (client, provider, optionID) = try await makeClientWithOption()
             provider.purchaseResponse = .failure(.storeProblem)
-            provider.customerInfoResponses = [.failure(.network)]
-            await assertClientError(.networkUnavailable) {
+            provider.customerInfoResponses = [.failure(.network(.init(category: .network)))]
+            await assertClientError(.networkUnavailable(.init(category: .network))) {
                 _ = try await client.purchase(optionID)
             }
         }
@@ -149,7 +149,7 @@ final class RevenueCatPurchaseTests: XCTestCase {
 
     func testPurchaseErrorNormalization() async throws {
         let mappings: [(ProviderError, RevenueCatClientError)] = [
-            (.network, .networkUnavailable),
+            (.network(.init(category: .network)), .networkUnavailable(.init(category: .network))),
             (.purchaseNotAllowed, .storeUnavailable),
             (.productNotAvailable, .storeUnavailable),
             (.purchaseInvalid, .invalidPurchase),

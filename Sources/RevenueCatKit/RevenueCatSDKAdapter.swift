@@ -232,7 +232,8 @@ final class RevenueCatSDKAdapter: RevenueCatProviding {
         )
     }
 
-    private func mapError(_ error: Error) -> ProviderError {
+    // Internal seam for deterministic SDK NSError mapping tests; never calls the SDK.
+    func mapError(_ error: Error) -> ProviderError {
         if error is CancellationError {
             return .taskCancelled
         }
@@ -273,7 +274,20 @@ final class RevenueCatSDKAdapter: RevenueCatProviding {
         case .logOutAnonymousUserError:
             return .logOutAnonymousUser
         case .networkError, .offlineConnectionError, .apiEndpointBlockedError:
-            return .network
+            let category: NetworkFailureDiagnostics.Category
+            switch errorCode {
+            case .offlineConnectionError: category = .offline
+            case .apiEndpointBlockedError: category = .endpointBlocked
+            default: category = .network
+            }
+            // RevenueCat 的 networkError 把系统 NSError 放在直接 underlying error 中。
+            // offline/endpointBlocked 可能没有系统码，不能从描述或 URL 猜测。
+            let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError
+            let transportCode = underlying.flatMap {
+                $0.domain == NSURLErrorDomain
+                    ? NetworkFailureDiagnostics.TransportCode(rawValue: $0.code) : nil
+            }
+            return .network(.init(category: category, transportCode: transportCode))
         case .operationAlreadyInProgressForProductError:
             return .operationInProgress
         default:

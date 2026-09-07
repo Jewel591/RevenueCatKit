@@ -28,6 +28,10 @@ Also read and obey the target repository's `AGENTS.md` or equivalent instruction
 9. Delete App-owned CustomerInfo mapping, Offering mirrors, purchase locks, SDK delegates, error-code switches, and product-based entitlement logic that RevenueCatKit now owns. Retain only App semantics, identity/session bridging, paywall UI, and localized presentation.
 10. Build and run the smallest relevant tests, then run product-playbook's `revenuecat-kit-lint`. The lint rejects direct RevenueCat imports and package/product links across application-target source roots; do not duplicate that structural scan in the App test target.
 
+## 网络诊断接线
+
+接入 3.0 前先读 README 的「网络诊断与 3.0 接入」。将当前错误的 `networkDiagnostics?.telemetryContext` 合并进宿主已有错误事件，保留原事件名与 outcome；不要从描述解析网络原因。更新依赖最低版本、实际解析文件和无载荷错误构造的测试。以宿主遥测映射测试证明字段送达；Kit 版本发布不等于消费者已接线或购买故障已修复。
+
 ## Preserve these boundaries
 
 - RevenueCat Entitlement answers whether the user has access.
