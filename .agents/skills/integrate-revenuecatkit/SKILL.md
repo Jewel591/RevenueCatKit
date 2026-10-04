@@ -32,6 +32,10 @@ Also read and obey the target repository's `AGENTS.md` or equivalent instruction
 
 接入 3.0 前先读 README 的「网络诊断与 3.0 接入」。将当前错误的 `networkDiagnostics?.telemetryContext` 合并进宿主已有错误事件，保留原事件名与 outcome；不要从描述解析网络原因。更新依赖最低版本、实际解析文件和无载荷错误构造的测试。以宿主遥测映射测试证明字段送达；Kit 版本发布不等于消费者已接线或购买故障已修复。
 
+## SDK 有限诊断接线
+
+接入 4.0 先读 README「SDK 有限诊断与 4.0 接入」，按该合同更新依赖、错误构造与实际解析文件。将当前错误的 `sdkDiagnostics?.telemetryContext` 合并进宿主已有错误事件，并保留网络诊断接线。测试只覆盖宿主字段送达；白名单映射由 Kit package tests 持有。不得从空诊断反推原因，不得将 SDK 分类当成最终根因，不新增分析事件或以诊断改变用户行为。
+
 ## Preserve these boundaries
 
 - RevenueCat Entitlement answers whether the user has access.

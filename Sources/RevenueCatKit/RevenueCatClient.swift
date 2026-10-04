@@ -162,7 +162,7 @@ public final class RevenueCatClient {
             publish(
                 entitlement: .replace(nil),
                 desiredIdentity: desiredIdentity,
-                identityAlignment: .failed(.unknown),
+                identityAlignment: .failed(.unknown(nil)),
                 offerings: clearedOfferingStates()
             )
             return
@@ -1050,7 +1050,7 @@ private extension RevenueCatClient {
         if let configuration {
             let validated = try configuration.validated(desiredIdentity: desiredIdentity)
             guard let desiredIdentity = validated.desiredIdentity else {
-                throw RevenueCatClientError.unknown
+                throw RevenueCatClientError.unknown(nil)
             }
             return desiredIdentity
         }
@@ -1301,7 +1301,7 @@ private extension RevenueCatClient {
     }
 
     func normalizedClientError(_ error: Error) -> RevenueCatClientError {
-        normalizedError(error) as? RevenueCatClientError ?? .unknown
+        normalizedError(error) as? RevenueCatClientError ?? .unknown(nil)
     }
 
     func normalizedError(_ error: Error) -> Error {
@@ -1309,7 +1309,7 @@ private extension RevenueCatClient {
             return error
         }
         guard let error = error as? ProviderError else {
-            return error is CancellationError ? CancellationError() : RevenueCatClientError.unknown
+            return error is CancellationError ? CancellationError() : RevenueCatClientError.unknown(nil)
         }
         switch error {
         case .network(let diagnostics):
@@ -1326,8 +1326,14 @@ private extension RevenueCatClient {
             return RevenueCatClientError.optionUnavailable
         case .taskCancelled:
             return CancellationError()
+        case .unknown(let diagnostics):
+            return RevenueCatClientError.unknown(diagnostics)
+        case .storeProblem:
+            return RevenueCatClientError.unknown(.init(code: .storeProblem))
+        case .productAlreadyPurchased:
+            return RevenueCatClientError.unknown(.init(code: .productAlreadyPurchased))
         default:
-            return RevenueCatClientError.unknown
+            return RevenueCatClientError.unknown(nil)
         }
     }
 

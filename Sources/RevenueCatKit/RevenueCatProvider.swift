@@ -40,7 +40,7 @@ enum ProviderError: Error, Sendable, Equatable {
     case operationInProgress
     case optionUnavailable
     case taskCancelled
-    case unknown
+    case unknown(SDKFailureDiagnostics?)
 }
 
 struct ProviderEntitlement: Sendable, Equatable {
