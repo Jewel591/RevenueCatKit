@@ -285,16 +285,16 @@ func purchaseErrorMessage(for error: Error) -> LocalizedStringKey {
 
 Do not show `localizedDescription` from RevenueCat or raw internal enum names directly to users.
 
-### 网络诊断接入现有事件
+### 失败诊断接入现有事件
 
 ```swift
-if let failure = error as? RevenueCatClientError,
-   let diagnostics = failure.networkDiagnostics {
-    context.merge(diagnostics.telemetryContext) { _, kitValue in kitValue }
+if let failure = error as? RevenueCatClientError {
+    context.merge(failure.networkDiagnostics?.telemetryContext ?? [:]) { _, kitValue in kitValue }
+    context.merge(failure.sdkDiagnostics?.telemetryContext ?? [:]) { _, kitValue in kitValue }
 }
 ```
 
-`context` 是宿主已有事件的字符串上下文。事件名称、错误 outcome 和用户提示继续由宿主持有；字段合同与 3.0 升级要求只在 README「网络诊断与 3.0 接入」维护。
+`context` 是宿主已有事件的字符串上下文。事件名称、错误 outcome 和用户提示继续由宿主持有；字段合同与升级要求只在 README 的两节诊断接入说明中维护。
 
 ## 7. Migration searches
 

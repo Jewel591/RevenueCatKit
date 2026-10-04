@@ -156,7 +156,7 @@ final class RevenueCatPurchaseTests: XCTestCase {
             (.invalidReceipt, .invalidPurchase),
             (.invalidAppUserID, .invalidPurchase),
             (.operationInProgress, .operationInProgress),
-            (.unknown, .unknown),
+            (.unknown(nil), .unknown(nil)),
         ]
 
         for (providerError, clientError) in mappings {

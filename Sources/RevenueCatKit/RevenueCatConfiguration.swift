@@ -121,7 +121,7 @@ public enum RevenueCatClientError: Error, Sendable, Equatable {
     case invalidPurchase
     case identityOperationNotAllowed
     case identityChangedDuringOperation
-    case unknown
+    case unknown(SDKFailureDiagnostics?)
 }
 
 enum RevenueCatLogLevel: Sendable, Equatable {

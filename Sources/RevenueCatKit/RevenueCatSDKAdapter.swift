@@ -44,7 +44,7 @@ final class RevenueCatSDKAdapter: RevenueCatProviding {
 
     func customerInfo(policy: CustomerInfoFetchPolicy) async throws -> ProviderCustomerInfo {
         guard let fetchedForAppUserID = appUserID else {
-            throw ProviderError.unknown
+            throw ProviderError.unknown(nil)
         }
 
         do {
@@ -97,7 +97,7 @@ final class RevenueCatSDKAdapter: RevenueCatProviding {
 
     func offering(for placement: PaywallPlacement?) async throws -> ProviderOfferingResult {
         guard let fetchedForAppUserID = appUserID else {
-            throw ProviderError.unknown
+            throw ProviderError.unknown(nil)
         }
 
         do {
@@ -152,7 +152,7 @@ final class RevenueCatSDKAdapter: RevenueCatProviding {
             throw ProviderError.optionUnavailable
         }
         guard let fetchedForAppUserID = appUserID else {
-            throw ProviderError.unknown
+            throw ProviderError.unknown(nil)
         }
 
         let status = await Purchases.shared.checkTrialOrIntroDiscountEligibility(product: package.storeProduct)
@@ -167,7 +167,7 @@ final class RevenueCatSDKAdapter: RevenueCatProviding {
             throw ProviderError.optionUnavailable
         }
         guard let fetchedForAppUserID = appUserID else {
-            throw ProviderError.unknown
+            throw ProviderError.unknown(nil)
         }
 
         do {
@@ -186,7 +186,7 @@ final class RevenueCatSDKAdapter: RevenueCatProviding {
 
     func restorePurchases() async throws -> ProviderCustomerInfo {
         guard let fetchedForAppUserID = appUserID else {
-            throw ProviderError.unknown
+            throw ProviderError.unknown(nil)
         }
 
         do {
@@ -250,7 +250,7 @@ final class RevenueCatSDKAdapter: RevenueCatProviding {
         }
 
         guard let errorCode = error as? ErrorCode else {
-            return .unknown
+            return .unknown(nil)
         }
         switch errorCode {
         case .purchaseCancelledError:
@@ -291,7 +291,28 @@ final class RevenueCatSDKAdapter: RevenueCatProviding {
         case .operationAlreadyInProgressForProductError:
             return .operationInProgress
         default:
-            return .unknown
+            let diagnostics = diagnosticCode(errorCode).map { code in
+                // Offering failures can wrap a finite SDK product-request timeout.
+                // Read only the direct underlying SDK error; never parse text or recurse.
+                let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? Error
+                let underlyingCode = underlying.flatMap { $0 as? ErrorCode }.flatMap(diagnosticCode)
+                return SDKFailureDiagnostics(code: code, underlyingCode: underlyingCode)
+            }
+            return .unknown(diagnostics)
+        }
+    }
+
+    private func diagnosticCode(_ code: ErrorCode) -> SDKFailureDiagnostics.Code? {
+        switch code {
+        case .configurationError: .configuration
+        case .invalidCredentialsError: .invalidCredentials
+        case .invalidAppleSubscriptionKeyError: .invalidAppleSubscriptionKey
+        case .unexpectedBackendResponseError: .unexpectedBackendResponse
+        case .unknownBackendError: .unknownBackend
+        case .productRequestTimedOut: .productRequestTimedOut
+        case .storeProblemError: .storeProblem
+        case .productAlreadyPurchasedError: .productAlreadyPurchased
+        default: nil
         }
     }
 }

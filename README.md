@@ -231,6 +231,16 @@ let outcome = try await RevenueCatClient.shared.restorePurchases()
 
 3.0 是源代码不兼容版本：将依赖最低版本设为 `3.0.0`，使用兼容范围并提交实际解析后的 `Package.resolved`。`case .networkUnavailable:` 分类仍可沿用；构造测试错误时改为 `.networkUnavailable(.init(category: .network))`。错误相等比较包含诊断载荷，按类别判断应使用模式匹配。2.x 消费者必须单独完成升级与遥测接线，发布 Kit 本身不会补齐宿主上报，也不代表产品购买故障已修复。
 
+### SDK 有限诊断与 4.0 接入
+
+`RevenueCatClientError.unknown` 携带可选的 `SDKFailureDiagnostics`。宿主将当前错误的 `sdkDiagnostics?.telemetryContext` 合并进已有错误事件，同时保留已有 `networkDiagnostics` 接线、事件名、outcome 和用户提示。诊断随错误实例传递，不建立共享的最近错误状态。
+
+字段只包含白名单值：`sdk_error_code` 为 `configuration`、`invalid_credentials`、`invalid_apple_subscription_key`、`unexpected_backend_response`、`unknown_backend`、`product_request_timed_out`、`store_problem` 或 `product_already_purchased`；`sdk_error_category` 分别归入 `configuration`、`service`、`store`。只有直接底层错误也是白名单 SDK 错误时，才附带 `sdk_underlying_error_code`，不递归、不解析描述、不传原始数值或任意域。
+
+这些值表示 SDK 报告的分类，不是最终根因证明。SDK 会把商品请求超时包成 configuration 错误，此时外层为 `configuration`，直接底层为 `product_request_timed_out`；不得据外层分类自动修改后台配置。`unknown(nil)` 表示没有可保留的证据，不能反推已发生某种配置或网络错误，也不能排除这些原因。诊断不得用于权益、商品选择、重试策略或用户文案。
+
+4.0 为源代码不兼容版本：最低版本设为 `4.0.0`，使用兼容范围并提交实际解析后的 `Package.resolved`；原无载荷错误构造改为 `.unknown(nil)`，`case .unknown:` 分类仍可沿用。相等比较包含诊断载荷，业务分类用模式匹配。现有取消、待处理、网络错误，以及 storeProblem/productAlreadyPurchased 的购买后权益确认流程保留原语义。宿主只测试字段进入已有事件，不重新解析 RevenueCat SDK。Kit 发布不能恢复历史样本已丢失的信息，也不表示产品购买故障已修复。
+
 
 `DistributionChannel` 只用于诊断和环境标记，绝不参与会员权限判断。
 
