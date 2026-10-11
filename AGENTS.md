@@ -27,7 +27,7 @@ in `.agents/skills/integrate-revenuecatkit/`.
   coverage with an injected provider. Do not test against the live SDK.
 - Keep the integration skill, reference, README, and public declarations in
   sync in the same PR.
-- `CLAUDE.md` is a relative symlink to this file; rules are edited only here.
+- `AGENTS.md` is a relative symlink to this file; rules are edited only here.
 
 ## Release discipline
 
