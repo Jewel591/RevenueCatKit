@@ -190,6 +190,13 @@ public struct EntitlementDiagnostics: Sendable, Equatable {
     }
 }
 
+/// Purchase ownership is presentation metadata; access still comes from the entitlement.
+public enum PurchaseOwnership: Sendable, Equatable {
+    case purchased
+    case familyShared
+    case unknown
+}
+
 public struct EntitlementSnapshot: Sendable, Equatable {
     public let accessLevel: AccessLevel
     public let billingCondition: BillingCondition
@@ -201,6 +208,7 @@ public struct EntitlementSnapshot: Sendable, Equatable {
     public let requestDate: Date
     public let freshness: SnapshotFreshness
     public let diagnostics: EntitlementDiagnostics
+    public let ownership: PurchaseOwnership
 
     public init(
         accessLevel: AccessLevel,
@@ -212,7 +220,8 @@ public struct EntitlementSnapshot: Sendable, Equatable {
         isSandbox: Bool,
         requestDate: Date,
         freshness: SnapshotFreshness,
-        diagnostics: EntitlementDiagnostics = .empty
+        diagnostics: EntitlementDiagnostics = .empty,
+        ownership: PurchaseOwnership = .unknown
     ) {
         self.accessLevel = accessLevel
         self.billingCondition = billingCondition
@@ -224,6 +233,7 @@ public struct EntitlementSnapshot: Sendable, Equatable {
         self.requestDate = requestDate
         self.freshness = freshness
         self.diagnostics = diagnostics
+        self.ownership = ownership
     }
 }
 
@@ -250,7 +260,8 @@ extension EntitlementSnapshot {
             isSandbox: isSandbox,
             requestDate: requestDate,
             freshness: freshness ?? self.freshness,
-            diagnostics: diagnostics
+            diagnostics: diagnostics,
+            ownership: ownership
         )
     }
 
@@ -326,6 +337,15 @@ public struct PurchaseOptionID: Hashable, Sendable {
     }
 }
 
+/// Store product semantics, independent of the Dashboard package's duration label.
+public enum ProductKind: Sendable, Equatable {
+    case consumable
+    case nonConsumable
+    case nonRenewingSubscription
+    case autoRenewableSubscription
+    case unknown
+}
+
 public struct PurchaseOption: Sendable, Equatable {
     public let id: PurchaseOptionID
     public let packageType: PackageType
@@ -337,6 +357,9 @@ public struct PurchaseOption: Sendable, Equatable {
     public let subscriptionPeriod: SubscriptionPeriod?
     public let introductoryOffer: IntroductoryOffer?
     public let productID: String
+    public let productKind: ProductKind
+    /// nil means no store evidence, rather than a known non-shareable product.
+    public let isFamilyShareable: Bool?
 
     public init(
         id: PurchaseOptionID,
@@ -348,7 +371,9 @@ public struct PurchaseOption: Sendable, Equatable {
         currencyCode: String?,
         subscriptionPeriod: SubscriptionPeriod?,
         introductoryOffer: IntroductoryOffer? = nil,
-        productID: String
+        productID: String,
+        productKind: ProductKind = .unknown,
+        isFamilyShareable: Bool? = nil
     ) {
         self.id = id
         self.packageType = packageType
@@ -360,6 +385,8 @@ public struct PurchaseOption: Sendable, Equatable {
         self.subscriptionPeriod = subscriptionPeriod
         self.introductoryOffer = introductoryOffer
         self.productID = productID
+        self.productKind = productKind
+        self.isFamilyShareable = isFamilyShareable
     }
 }
 

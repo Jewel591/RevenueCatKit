@@ -53,6 +53,7 @@ struct ProviderEntitlement: Sendable, Equatable {
     let isSandbox: Bool
     let unsubscribeDetectedAt: Date?
     let billingIssueDetectedAt: Date?
+    var ownership: PurchaseOwnership = .unknown
 }
 
 struct ProviderCustomerInfo: Sendable, Equatable {
@@ -95,6 +96,8 @@ struct ProviderPackage: Sendable, Equatable {
     let subscriptionPeriod: SubscriptionPeriod?
     let introductoryOffer: IntroductoryOffer?
     let productID: String
+    var productKind: ProductKind = .unknown
+    var isFamilyShareable: Bool? = nil
 }
 
 struct ProviderOffering: Sendable, Equatable {

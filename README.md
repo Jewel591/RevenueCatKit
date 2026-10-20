@@ -217,6 +217,14 @@ let outcome = try await RevenueCatClient.shared.restorePurchases()
 
 购买和恢复返回有信息量的结果枚举，不用 `Bool` 混淆取消、待处理、无有效权益与真正失败。
 
+## 商品类型与家庭共享
+
+`PurchaseOption.productKind` 表达商店实际商品类型：消耗品、非消耗品、非续订订阅、自动续订订阅或未知。`packageType` 仅表达 RevenueCat Dashboard 的包装；年付或月付包装不能证明自动续订，不得从商品 ID、标题或描述猜测商品类型。
+
+`PurchaseOption.isFamilyShareable` 表示商品是否在商店开放家庭共享；`nil` 表示缺少证据，与明确的 `false` 不同。宿主只能在值为 `true` 时声明该商品支持共享；该值不证明当前用户具有有效会员，也不表示家庭成员已经完成共享。
+
+`EntitlementSnapshot.ownership` 区分本人购买、家庭共享和未知。它用于说明当前权益来源，授权仍只依据 `AccessLevel`；一个已失效的家庭共享权益不会因为来源是家庭而继续解锁。真实家庭成员接收、退款及到期仍须用真实商店环境验证，单元测试只验证 SDK 证据的映射与传播。
+
 ## 并发与错误
 
 配置、购买、恢复和身份对齐共享互斥操作门。购买或恢复期间的新身份会排队，在 StoreKit 操作完成后按“最后一次声明优先”对齐；旧身份的完成结果不会重新授予权限。重复操作立即抛出 `RevenueCatClientError.operationInProgress`；取消调用方 Task 不会提前释放仍在 StoreKit 中进行的购买。

@@ -204,6 +204,8 @@ func plans(for state: OfferingLoadState) -> some View {
 
 Use `PurchaseOption.localizedTitle`, `localizedDescription`, `localizedPrice`, `subscriptionPeriod`, and `packageType` to draw the App's paywall. Do not use Product ID for UI branching. RevenueCatKit deliberately preserves Product ID only for diagnostics.
 
+`PurchaseOption.productKind` supplies store renewal semantics independently of `packageType`. Use `isFamilyShareable == true` for a supported-family-sharing claim; `nil` is unknown. `EntitlementSnapshot.ownership` describes the current entitlement's source, and never replaces `AccessLevel` for authorization. Do not infer these facts from product identifiers or descriptions.
+
 An `introductoryOffer` describes dashboard product metadata, not the current Apple Account's right to receive it. Before showing introductory copy, query the visible option and advertise the offer only for `.eligible`. Both `.ineligible` and `.unknown` must show the normal price without an introductory claim:
 
 ```swift

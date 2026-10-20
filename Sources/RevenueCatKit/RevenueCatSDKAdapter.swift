@@ -134,7 +134,9 @@ final class RevenueCatSDKAdapter: RevenueCatProviding {
                             numberOfPeriods: $0.numberOfPeriods
                         )
                     },
-                    productID: package.storeProduct.productIdentifier
+                    productID: package.storeProduct.productIdentifier,
+                    productKind: package.storeProduct.productType.companyValue,
+                    isFamilyShareable: package.storeProduct.isFamilyShareable
                 )
             }
 
@@ -221,7 +223,8 @@ final class RevenueCatSDKAdapter: RevenueCatProviding {
                 productID: entitlement.productIdentifier,
                 isSandbox: entitlement.isSandbox,
                 unsubscribeDetectedAt: entitlement.unsubscribeDetectedAt,
-                billingIssueDetectedAt: entitlement.billingIssueDetectedAt
+                billingIssueDetectedAt: entitlement.billingIssueDetectedAt,
+                ownership: entitlement.ownershipType.companyValue
             )
         }
         return .init(
@@ -406,6 +409,29 @@ private extension IntroEligibilityStatus {
         switch self {
         case .eligible: .eligible
         case .ineligible, .noIntroOfferExists: .ineligible
+        case .unknown: .unknown
+        @unknown default: .unknown
+        }
+    }
+}
+
+extension RevenueCat.StoreProduct.ProductType {
+    var companyValue: ProductKind {
+        switch self {
+        case .consumable: .consumable
+        case .nonConsumable: .nonConsumable
+        case .nonRenewableSubscription: .nonRenewingSubscription
+        case .autoRenewableSubscription: .autoRenewableSubscription
+        @unknown default: .unknown
+        }
+    }
+}
+
+extension RevenueCat.PurchaseOwnershipType {
+    var companyValue: PurchaseOwnership {
+        switch self {
+        case .purchased: .purchased
+        case .familyShared: .familyShared
         case .unknown: .unknown
         @unknown default: .unknown
         }

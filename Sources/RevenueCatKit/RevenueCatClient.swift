@@ -816,7 +816,8 @@ private extension RevenueCatClient {
             isSandbox: entitlement.isSandbox,
             requestDate: customerInfo.requestDate,
             freshness: freshness,
-            diagnostics: diagnostics
+            diagnostics: diagnostics,
+            ownership: entitlement.ownership
         )
     }
 
@@ -840,7 +841,9 @@ private extension RevenueCatClient {
                 currencyCode: package.currencyCode,
                 subscriptionPeriod: package.subscriptionPeriod,
                 introductoryOffer: package.introductoryOffer,
-                productID: package.productID
+                productID: package.productID,
+                productKind: package.productKind,
+                isFamilyShareable: package.isFamilyShareable
             )
         }
         optionIDsByScope[scope] = installedOptionIDs
