@@ -177,8 +177,8 @@ struct ExtensionAccessContextTests {
         }
     }
 
-    @Test("#20: Older portable missing evidence cannot undo a newer confirmed premium response")
-    func newerConfirmationOwnsTheClock() async throws {
+    @Test("#20: Older portable missing evidence cannot undo a newer confirmed response", arguments: [false, true])
+    func newerConfirmationOwnsTheClock(active: Bool) async throws {
         try await withClient(entitlement: makeEntitlement(isActiveInCurrentEnvironment: true)) { main, provider, clock in
             clock.date = Date(timeIntervalSince1970: 2_100)
             provider.customerInfoResponses = [.success(makeCustomerInfo(appUserID: "user-a", requestDate: clock.date))]
@@ -186,12 +186,18 @@ struct ExtensionAccessContextTests {
             let oldMissing = try #require(main.extensionAccessContext())
             clock.date = Date(timeIntervalSince1970: 3_000)
             provider.customerInfoResponses = [.success(makeCustomerInfo(appUserID: "user-a", requestDate: clock.date,
-                entitlement: makeEntitlement(isActiveInCurrentEnvironment: true, expirationDate: nil)))]
+                entitlement: makeEntitlement(isActiveInCurrentEnvironment: active, expirationDate: nil)))]
             _ = try await main.forceRefresh()
             clock.date = Date(timeIntervalSince1970: 4_000)
             provider.customerInfoResponses = [.success(makeCustomerInfo(appUserID: "user-a", requestDate: clock.date))]
             _ = try await main.forceRefresh(restoringAccessFrom: oldMissing)
-            #expect(main.extensionAccessContext()?.grace.firstSeenAt == 4_000)
+            if active {
+                #expect(main.extensionAccessContext()?.grace.firstSeenAt == 4_000)
+                #expect(main.state.accessLevel == .premiumInGracePeriod)
+            } else {
+                #expect(main.state.accessLevel == .free)
+                #expect(main.extensionAccessContext()?.grace.hasConfirmedPremium == false)
+            }
         }
     }
 
