@@ -192,6 +192,36 @@ public final class RevenueCatClient {
         }
     }
 
+    /// Restore portable grace evidence only after the main SDK has restored the
+    /// same owner. The usual alias-preserving app bootstrap remains unchanged.
+    public func configure(_ configuration: Configuration, restoringAccessFrom context: ExtensionAccessContext) async throws {
+        try await runRetainedMutation(operation: .configuring) { [self] in
+            try await performConfigure(configuration, portableContext: context)
+        }
+    }
+
+    /// Extension bootstrap reuses the Kit-issued owner, including an anonymous
+    /// owner, and performs a current read without logIn or logOut aliasing.
+    public func configureForExtension(_ proposed: Configuration, restoring context: ExtensionAccessContext) async throws {
+        guard context.configurationFingerprint == ExtensionAccessContext.fingerprint(proposed) else {
+            throw RevenueCatClientError.configurationConflict
+        }
+        let desired: DesiredIdentity = context.isAnonymous ? .anonymous : .account(.init(context.appUserID))
+        let validatedConfiguration = try proposed.validated(desiredIdentity: desired).configuration
+        try await runRetainedMutation(operation: .configuring) { [self] in
+            if let configuration {
+                guard configuration == validatedConfiguration,
+                      provider.appUserID == context.appUserID,
+                      provider.isAnonymous == context.isAnonymous else { throw RevenueCatClientError.configurationConflict }
+                revocationGrace.restorePortableState(context.grace, identity: context.appUserID)
+                try await performDesiredIdentityAlignment(desired, policy: .fetchCurrent)
+                return
+            }
+            publish(desiredIdentity: desired, identityAlignment: .transitioning)
+            try await performConfigure(proposed, portableContext: context, extensionBootstrap: true)
+        }
+    }
+
     @discardableResult
     public func refresh(
         policy: CustomerInfoFetchPolicy = .notStaleCachedOrFetched
@@ -206,6 +236,28 @@ public final class RevenueCatClient {
     @discardableResult
     public func forceRefresh() async throws -> EntitlementSnapshot {
         try await refresh(policy: .fetchCurrent)
+    }
+
+    @discardableResult
+    public func forceRefresh(restoringAccessFrom context: ExtensionAccessContext) async throws -> EntitlementSnapshot {
+        if let configuration, let identity = provider.appUserID,
+           identity == context.appUserID, context.configurationFingerprint == ExtensionAccessContext.fingerprint(configuration) {
+            revocationGrace.restorePortableState(context.grace, identity: identity)
+        }
+        return try await forceRefresh()
+    }
+
+    /// Export only an aligned identity and its current evidence. The host may
+    /// persist this context in its own app group; it cannot extend its lifetime.
+    public func extensionAccessContext() -> ExtensionAccessContext? {
+        guard let configuration, state.identityAlignment == .matching,
+              let identity = provider.appUserID, state.currentAppUserID?.rawValue == identity,
+              let snapshot = state.entitlement else { return nil }
+        return .init(configurationFingerprint: ExtensionAccessContext.fingerprint(configuration),
+            appUserID: identity, isAnonymous: state.isAnonymous,
+            access: .init(snapshot.accessLevel), requestDate: snapshot.requestDate,
+            validUntil: ExtensionAccessContext.deadline(for: snapshot, graceDeadline: revocationGrace.portableDeadline(identity: identity)),
+            grace: revocationGrace.portableState(identity: identity, requestDate: snapshot.requestDate))
     }
 
     @discardableResult
@@ -366,7 +418,7 @@ private extension RevenueCatClient {
         case replace(EntitlementSnapshot?)
     }
 
-    func performConfigure(_ proposedConfiguration: Configuration) async throws {
+    func performConfigure(_ proposedConfiguration: Configuration, portableContext: ExtensionAccessContext? = nil, extensionBootstrap: Bool = false) async throws {
         let validatedConfiguration: Configuration
         let validatedDesiredIdentity: DesiredIdentity?
         do {
@@ -421,18 +473,27 @@ private extension RevenueCatClient {
         // anonymous ID.
         provider.configure(
             apiKey: validatedConfiguration.publicSDKKey.rawValue,
-            appUserID: nil,
+            appUserID: extensionBootstrap ? portableContext?.appUserID : nil,
             proxyURL: runtimeOptions.proxyURL,
             logLevel: runtimeOptions.logLevel
         )
         if let restoredAppUserID = provider.appUserID {
             revocationGrace.prepareInitialRestoredIdentity(restoredAppUserID)
+            if let portableContext,
+               portableContext.configurationFingerprint == ExtensionAccessContext.fingerprint(validatedConfiguration),
+               restoredAppUserID == portableContext.appUserID {
+                revocationGrace.restorePortableState(portableContext.grace, identity: restoredAppUserID)
+            }
             backfillConfirmedExpirationFromProviderCache(
                 identity: restoredAppUserID,
                 entitlementID: validatedConfiguration.premiumEntitlementID.rawValue
             )
         }
         sdkConfiguredByClient = true
+        if extensionBootstrap, let portableContext,
+           (provider.appUserID != portableContext.appUserID || provider.isAnonymous != portableContext.isAnonymous) {
+            throw RevenueCatClientError.configurationConflict
+        }
         publishProviderIdentity(
             entitlement: nil,
             identityAlignment: effectiveDesiredIdentity == nil ? .undeclared : .transitioning
@@ -450,10 +511,10 @@ private extension RevenueCatClient {
 
         installStreamObserverIfNeeded()
         guard let effectiveDesiredIdentity else { return }
-        try await performDesiredIdentityAlignment(effectiveDesiredIdentity)
+        try await performDesiredIdentityAlignment(effectiveDesiredIdentity, policy: extensionBootstrap ? .fetchCurrent : .notStaleCachedOrFetched)
     }
 
-    func performDesiredIdentityAlignment(_ desiredIdentity: DesiredIdentity) async throws {
+    func performDesiredIdentityAlignment(_ desiredIdentity: DesiredIdentity, policy: CustomerInfoFetchPolicy = .notStaleCachedOrFetched) async throws {
         isInitialRefreshInFlight = true
         defer {
             isInitialRefreshInFlight = false
@@ -488,13 +549,13 @@ private extension RevenueCatClient {
             if identityAlreadyAligned {
                 let capture = try captureIdentity()
                 customerInfo = try await provider.customerInfo(
-                    policy: .notStaleCachedOrFetched
+                    policy: policy
                 )
                 try validateCompletion(
                     capture: capture,
                     fetchedForAppUserID: customerInfo.fetchedForAppUserID
                 )
-                freshness = .cachePermitted
+                freshness = policy == .fetchCurrent ? .networkConfirmed : .cachePermitted
             } else {
                 switch desiredIdentity {
                 case .anonymous:
@@ -756,6 +817,7 @@ private extension RevenueCatClient {
             ) {
                 return protectedSnapshot.withDiagnostics(diagnostics)
             }
+            revocationGrace.recordConfirmedFree(identity: appUserID, requestDate: customerInfo.requestDate)
             return .init(
                 accessLevel: .free,
                 billingCondition: .notApplicable,
@@ -773,34 +835,38 @@ private extension RevenueCatClient {
         let accessLevel: AccessLevel
         let billingCondition: BillingCondition
         if !entitlement.isActiveInCurrentEnvironment {
-            revocationGrace.recordConfirmedFree(identity: appUserID)
+            revocationGrace.recordConfirmedFree(identity: appUserID, requestDate: customerInfo.requestDate)
             accessLevel = .free
             billingCondition = .expired
         } else if entitlement.billingIssueDetectedAt != nil {
             revocationGrace.recordConfirmedPremium(
                 identity: appUserID,
-                expirationDate: entitlement.expirationDate
+                expirationDate: entitlement.expirationDate,
+                requestDate: customerInfo.requestDate
             )
             accessLevel = .premiumInGracePeriod
             billingCondition = .billingIssueWhileActive
         } else if entitlement.unsubscribeDetectedAt != nil {
             revocationGrace.recordConfirmedPremium(
                 identity: appUserID,
-                expirationDate: entitlement.expirationDate
+                expirationDate: entitlement.expirationDate,
+                requestDate: customerInfo.requestDate
             )
             accessLevel = .premium
             billingCondition = .cancelledButActive
         } else if entitlement.expirationDate == nil {
             revocationGrace.recordConfirmedPremium(
                 identity: appUserID,
-                expirationDate: entitlement.expirationDate
+                expirationDate: entitlement.expirationDate,
+                requestDate: customerInfo.requestDate
             )
             accessLevel = .premium
             billingCondition = .notApplicable
         } else {
             revocationGrace.recordConfirmedPremium(
                 identity: appUserID,
-                expirationDate: entitlement.expirationDate
+                expirationDate: entitlement.expirationDate,
+                requestDate: customerInfo.requestDate
             )
             accessLevel = .premium
             billingCondition = .healthy

@@ -321,3 +321,18 @@ Verify with the package tests, the App's smallest membership test set, and an Ap
 - purchase success, cancellation, pending, stale option, and duplicate tap;
 - restore success and no active entitlement;
 - a source/project guard against direct RevenueCat SDK dependency.
+
+
+## 8. App 扩展授权桥
+
+App Group 文件访问在宿主根部创建和注入，不放进 Feature 或 Kit。主 App 配置/刷新后将可选的 `client.extensionAccessContext()` 原子保存。冷启动存在上下文时使用 `configure(configuration, restoringAccessFrom: context)`，前台使用 `forceRefresh(restoringAccessFrom: context)`；普通零参数/单参数入口保留原行为。
+
+```swift
+let cachedAccess = context.accessLevel(at: now(), for: configuration)
+if cachedAccess == .unknown {
+    try await client.configureForExtension(configuration, restoring: context)
+    // 根部原子保存 client.extensionAccessContext() 后，继续读取规范化 state。
+}
+```
+
+扩展入口恢复上下文中的同一购买身份并强制当前读取，匿名身份不通过业务账号 API 转换。未知、错误、到期不变成免费或无限期会员；宿主保留草稿。宽限及期限合同以 README 为准，不在宿主复制。上下文缺失时先要求主 App 完成一次初始化，不生成第二个购买身份。

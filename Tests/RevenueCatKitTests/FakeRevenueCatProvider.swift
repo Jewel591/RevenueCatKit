@@ -55,7 +55,7 @@ final class FakeRevenueCatProvider: RevenueCatProviding {
 
         if let appUserID {
             self.appUserID = appUserID
-            isAnonymous = false
+            isAnonymous = appUserID.hasPrefix("$RCAnonymousID:")
         } else if self.appUserID == nil {
             self.appUserID = "$RCAnonymousID:test"
             isAnonymous = true

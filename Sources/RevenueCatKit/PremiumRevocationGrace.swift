@@ -6,6 +6,13 @@ import Foundation
 final class PremiumRevocationGrace {
     static let period: TimeInterval = 7 * 24 * 60 * 60
 
+    struct PortableState: Codable, Sendable, Equatable {
+        var hasConfirmedPremium: Bool
+        var confirmedExpiresAt: TimeInterval?
+        var firstSeenAt: TimeInterval
+        var evidenceDate: Date
+    }
+
     private enum LegacyKey {
         static let hasSynced = "hasSyncedPremiumAccess"
         static let cachedPremium = "cachedPremiumAccess"
@@ -21,6 +28,9 @@ final class PremiumRevocationGrace {
 
         static func firstSeenAt(_ identity: String) -> String {
             "RevenueCatKit.revocationGrace.v2.\(encoded(identity)).firstSeenAt"
+        }
+        static func evidenceDate(_ identity: String) -> String {
+            "RevenueCatKit.revocationGrace.v2.\(encoded(identity)).evidenceDate"
         }
 
         /// Expiration of the last confirmed premium entitlement: absent when it was never
@@ -120,6 +130,7 @@ final class PremiumRevocationGrace {
         freshness: SnapshotFreshness
     ) -> EntitlementSnapshot? {
         guard defaults.bool(forKey: Key.hasConfirmedPremium(identity)) else { return nil }
+        defaults.set(requestDate.timeIntervalSince1970, forKey: Key.evidenceDate(identity))
 
         let currentTime = now().timeIntervalSince1970
         let storedFirstSeenAt = defaults.double(forKey: Key.firstSeenAt(identity))
@@ -161,7 +172,8 @@ final class PremiumRevocationGrace {
         )
     }
 
-    func recordConfirmedPremium(identity: String, expirationDate: Date?) {
+    func recordConfirmedPremium(identity: String, expirationDate: Date?, requestDate: Date? = nil) {
+        defaults.set((requestDate ?? now()).timeIntervalSince1970, forKey: Key.evidenceDate(identity))
         defaults.set(true, forKey: Key.hasConfirmedPremium(identity))
         defaults.set(0, forKey: Key.firstSeenAt(identity))
         defaults.set(
@@ -182,8 +194,37 @@ final class PremiumRevocationGrace {
         )
     }
 
-    func recordConfirmedFree(identity: String) {
+    func recordConfirmedFree(identity: String, requestDate: Date? = nil) {
+        defaults.set((requestDate ?? now()).timeIntervalSince1970, forKey: Key.evidenceDate(identity))
         clear(identity: identity)
+    }
+
+    func portableState(identity: String, requestDate: Date = .distantPast) -> PortableState {
+        .init(hasConfirmedPremium: defaults.bool(forKey: Key.hasConfirmedPremium(identity)),
+            confirmedExpiresAt: defaults.object(forKey: Key.confirmedExpiresAt(identity)) as? Double,
+            firstSeenAt: defaults.double(forKey: Key.firstSeenAt(identity)),
+            evidenceDate: (defaults.object(forKey: Key.evidenceDate(identity)) as? Double).map(Date.init(timeIntervalSince1970:)) ?? requestDate)
+    }
+
+    func restorePortableState(_ incoming: PortableState, identity: String) {
+        let local = portableState(identity: identity)
+        guard incoming.evidenceDate >= local.evidenceDate else { return }
+        var firstSeenAt = incoming.firstSeenAt
+        if incoming.hasConfirmedPremium, local.hasConfirmedPremium, firstSeenAt != 0, local.firstSeenAt != 0 {
+            firstSeenAt = min(firstSeenAt, local.firstSeenAt)
+        }
+        defaults.set(incoming.hasConfirmedPremium, forKey: Key.hasConfirmedPremium(identity))
+        defaults.set(firstSeenAt, forKey: Key.firstSeenAt(identity))
+        defaults.set(incoming.evidenceDate.timeIntervalSince1970, forKey: Key.evidenceDate(identity))
+        if let expiration = incoming.confirmedExpiresAt {
+            defaults.set(expiration, forKey: Key.confirmedExpiresAt(identity))
+        } else { defaults.removeObject(forKey: Key.confirmedExpiresAt(identity)) }
+    }
+
+    func portableDeadline(identity: String) -> Date? {
+        let state = portableState(identity: identity)
+        guard state.hasConfirmedPremium, state.firstSeenAt != 0 else { return nil }
+        return Date(timeIntervalSince1970: state.firstSeenAt + Self.period)
     }
 
     /// RevenueCat aliases an anonymous user into the first identified account during `logIn`.
@@ -200,6 +241,9 @@ final class PremiumRevocationGrace {
             forKey: Key.confirmedExpiresAt(sourceIdentity)
         ) as? Double {
             defaults.set(sourceExpiration, forKey: Key.confirmedExpiresAt(targetIdentity))
+        }
+        if let evidence = defaults.object(forKey: Key.evidenceDate(sourceIdentity)) {
+            defaults.set(evidence, forKey: Key.evidenceDate(targetIdentity))
         }
     }
 

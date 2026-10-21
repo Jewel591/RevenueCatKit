@@ -177,6 +177,38 @@ let diagnosis = diagnostics?.diagnosis
 let snapshot = try await RevenueCatClient.shared.forceRefresh()
 ```
 
+## App 扩展的共享授权
+
+主 App 可将 `extensionAccessContext()` 返回的不透明 `ExtensionAccessContext` 编码到自己拥有的 App Group。文件读写由宿主根部注入，Kit 不猜 App Group、目录或文件名。上下文包含按配置和购买身份绑定的缓存证据，不是可转让的购买凭据，也不能替代商店签发的权益。
+
+```swift
+let client = RevenueCatClient.shared
+// 首次主 App 启动：先声明已知账号事实。普通 SDK 身份恢复和 alias 行为不变。
+if let savedContext {
+    try await client.configure(configuration, restoringAccessFrom: savedContext)
+} else {
+    try await client.configure(configuration)
+}
+// 配置成功或权益变化后，由宿主原子保存该可选值；nil 表示没有已对齐证据。
+let contextToSave = client.extensionAccessContext()
+```
+
+扩展通过 `context.accessLevel(at: Date(), for: configuration)` 读取有期限的缓存结论。五分钟期限锚定原 CustomerInfo 的请求时间，重复编码或重新打开扩展不会续期；有效商品到期更早时使用更早边界。已确认仍有效的账单宽限不使用旧商品到期日提前撤权，临时缺失权益沿用 Kit 原撤权截止时间。过期、配置不匹配均为 `.unknown`，不能直接降为免费或继续授予无限期会员。
+
+缓存未知或到期时，扩展可请求 Kit 当前刷新：
+
+```swift
+try await client.configureForExtension(configuration, restoring: savedContext)
+let updatedContext = client.extensionAccessContext()
+let access = client.state.accessLevel
+```
+
+该入口只使用 Kit 发行的上下文恢复原购买身份，包括原匿名身份，并强制当前 CustomerInfo 请求；不通过 `logIn`、`logOut` 或宿主自造账号去转移、alias 购买。配置不匹配或提供方返回其他身份时拒绝授权。失败继续保持未知，宿主保留自己的未保存草稿，不以旧布尔值覆盖失败。
+
+扩展将更新后的上下文原子回存。主 App 前台刷新时使用 `forceRefresh(restoringAccessFrom:)`，冷启动使用上述 configure 重载，使扩展发现的撤权宽限回到原时钟。较旧证据不会覆盖较新确认，账号不匹配时不导入他人的保护状态；宿主不复制七天策略或自行推算宽限。
+
+上下文只是可重建缓存。App Group 路径、生命周期和错误提示由宿主持有；商品购买、恢复购买及账号事实声明仍在主 App 的既有接线执行。调用首次配置的扩展进程不得事先直接配置 RevenueCat SDK。真实匿名身份恢复、家庭共享到账与后台授权仍须在真实商店配置下验收。
+
 ## Offering 与购买
 
 默认读取 RevenueCat 当前 Offering：

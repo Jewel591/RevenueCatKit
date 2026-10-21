@@ -28,6 +28,10 @@ Also read and obey the target repository's `AGENTS.md` or equivalent instruction
 9. Delete App-owned CustomerInfo mapping, Offering mirrors, purchase locks, SDK delegates, error-code switches, and product-based entitlement logic that RevenueCatKit now owns. Retain only App semantics, identity/session bridging, paywall UI, and localized presentation.
 10. Build and run the smallest relevant tests, then run product-playbook's `revenuecat-kit-lint`. The lint rejects direct RevenueCat imports and package/product links across application-target source roots; do not duplicate that structural scan in the App test target.
 
+## App 扩展
+
+扩展需要会员授权时先读 README「App 扩展的共享授权」。主 App 导出 `ExtensionAccessContext`，根部在 App Group 原子读写；扩展按带时间和配置的访问方法读取，过期保持未知，并通过 `configureForExtension(_:restoring:)` 强制刷新原购买身份。更新上下文回存，主 App 冷启动/前台用对应的 restoringAccessFrom 重载导入撤权证据。不得缓存无期限会员布尔值、将 RevenueCat 匿名 ID 当业务账号传入 setDesiredIdentity、独立生成扩展购买身份，或在宿主重写宽限时钟。消费者仍只能接入发布后的兼容版本。
+
 ## 商品与家庭共享信息
 
 商品文案按 `PurchaseOption.productKind` 区分自动续订、非续订和一次性购买；`packageType` 不代表商品类型。仅在 `isFamilyShareable == true` 时声明商品支持家庭共享，`nil` 保持未知。会员来源可读 `EntitlementSnapshot.ownership`，但授权仍只依据 `AccessLevel`。不得从标题、描述或商品 ID 推断上述事实；家庭共享实际到账另做真实商店验证。
