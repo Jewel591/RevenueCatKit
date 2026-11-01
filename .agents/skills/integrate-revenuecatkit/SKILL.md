@@ -45,7 +45,7 @@ Also read and obey the target repository's `AGENTS.md` or equivalent instruction
 - RevenueCatKit performs configure, identity alignment, refresh, purchase, restore, normalized state, and error normalization.
 - The App draws the paywall and owns its copy, analytics context, campaign context, and navigation.
 
-Do not add RevenueCat Paywalls UI to this package. Do not expose RevenueCat SDK types through App APIs. Do not hard-code Product IDs or use them to infer membership duration, access, or UI. A Product ID already present in a Kit snapshot may be logged only for diagnostics when necessary.
+Do not call RevenueCat attribution APIs from the App: the Kit enables AdServices attribution token collection when it configures the SDK, and no ATT prompt is involved. Do not add RevenueCat Paywalls UI to this package. Do not expose RevenueCat SDK types through App APIs. Do not hard-code Product IDs or use them to infer membership duration, access, or UI. A Product ID already present in a Kit snapshot may be logged only for diagnostics when necessary.
 
 ## Host test boundary
 

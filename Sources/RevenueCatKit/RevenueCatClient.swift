@@ -425,6 +425,9 @@ private extension RevenueCatClient {
             proxyURL: runtimeOptions.proxyURL,
             logLevel: runtimeOptions.logLevel
         )
+        // House standard: Apple Ads attribution needs no ATT prompt, so every App
+        // sends the AdServices token and RevenueCat can join revenue to campaigns.
+        provider.enableAdServicesAttribution()
         if let restoredAppUserID = provider.appUserID {
             revocationGrace.prepareInitialRestoredIdentity(restoredAppUserID)
             backfillConfirmedExpirationFromProviderCache(

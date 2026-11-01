@@ -42,6 +42,10 @@ final class RevenueCatSDKAdapter: RevenueCatProviding {
         }
     }
 
+    func enableAdServicesAttribution() {
+        Purchases.shared.attribution.enableAdServicesAttributionTokenCollection()
+    }
+
     func customerInfo(policy: CustomerInfoFetchPolicy) async throws -> ProviderCustomerInfo {
         guard let fetchedForAppUserID = appUserID else {
             throw ProviderError.unknown(nil)

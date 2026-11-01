@@ -57,6 +57,7 @@ Apple 正身文档：[Making dependencies available to Xcode Cloud](https://deve
 RevenueCatKit 统一负责：
 
 - SDK 初始化，以及公司统一的网络代理和日志策略
+- Apple Ads（AdServices）归因令牌采集：配置 SDK 时自动开启，不需要 ATT 授权，App 不另行调用
 - 匿名、已登录及混合身份模式与 App User ID 校验
 - `CustomerInfo` 获取、主动刷新和变化监听
 - Entitlement 到统一 `AccessLevel` 的转换
