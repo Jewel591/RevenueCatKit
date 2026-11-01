@@ -10,6 +10,7 @@ final class FakeRevenueCatProvider: RevenueCatProviding {
 
     private(set) var configureCallCount = 0
     private(set) var configuredAppUserID: String?
+    private(set) var adServicesAttributionEnableCount = 0
     private(set) var customerInfoPolicies: [CustomerInfoFetchPolicy] = []
     private(set) var streamInstallCount = 0
     private(set) var logInCallCount = 0
@@ -60,6 +61,10 @@ final class FakeRevenueCatProvider: RevenueCatProviding {
             self.appUserID = "$RCAnonymousID:test"
             isAnonymous = true
         }
+    }
+
+    func enableAdServicesAttribution() {
+        adServicesAttributionEnableCount += 1
     }
 
     func customerInfo(policy: CustomerInfoFetchPolicy) async throws -> ProviderCustomerInfo {

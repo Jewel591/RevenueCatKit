@@ -116,8 +116,28 @@ final class RevenueCatConfigurationTests: XCTestCase {
         }
 
         XCTAssertEqual(provider.configureCallCount, 0)
+        XCTAssertEqual(provider.adServicesAttributionEnableCount, 0)
         XCTAssertEqual(client.state.operation, .idle)
         XCTAssertNil(client.state.entitlement)
+    }
+
+    func testConfigurationEnablesAdServicesAttributionOnceWithSDKSetup() async throws {
+        let provider = FakeRevenueCatProvider()
+        seedPersistedAccount(provider)
+        provider.customerInfoResponses = [.failure(.network(.init(category: .network)))]
+        let client = RevenueCatClient(provider: provider)
+        client.setDesiredIdentity(.account("user-a"))
+
+        await assertClientError(.networkUnavailable(.init(category: .network))) {
+            try await client.configure(makeConfiguration())
+        }
+        XCTAssertEqual(provider.adServicesAttributionEnableCount, 1)
+
+        provider.customerInfoResponses = [.success(makeCustomerInfo(appUserID: "user-a"))]
+        try await client.configure(makeConfiguration())
+
+        XCTAssertEqual(provider.configureCallCount, 1)
+        XCTAssertEqual(provider.adServicesAttributionEnableCount, 1)
     }
 
     func testIdentifiedConfigurationLogsInAfterRestoringPersistedIdentity() async throws {

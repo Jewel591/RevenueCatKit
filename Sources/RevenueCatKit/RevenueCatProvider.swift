@@ -13,6 +13,7 @@ protocol RevenueCatProviding: AnyObject {
         proxyURL: URL?,
         logLevel: RevenueCatLogLevel
     )
+    func enableAdServicesAttribution()
     func customerInfo(policy: CustomerInfoFetchPolicy) async throws -> ProviderCustomerInfo
     func customerInfoInvalidationStream() -> AsyncStream<Void>
     func logIn(appUserID: String) async throws -> ProviderLogInResult
